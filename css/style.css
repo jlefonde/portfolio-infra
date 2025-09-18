@@ -75,29 +75,23 @@
         }
 
         .detail-item {
-            margin-bottom: 15px;
             display: flex;
+            color: #666;
+            margin-bottom: 15px;
+            font-size: 0.9rem;
+            line-height: 1.4;
+            letter-spacing: 1px;
         }
 
-        .detail-label {
+        .detail-item i {
+            color: #333;
+            margin-right: 3px;
             font-size: 0.9rem;
             margin-bottom: 5px;
             min-width: 20px;
             margin-right: 10px;
             display: flex;
             align-items: center;
-        }
-
-        .detail-label i {
-            margin-right: 3px;
-        }
-
-        .detail-value {
-            font-size: 0.9rem;
-            color: #666;
-            line-height: 1.4;
-            letter-spacing: 0.5px;
-            flex: 1;
         }
 
         .profile-text {
