@@ -12,26 +12,32 @@
         }
 
         .resume-container {
-            max-width: 800px;
+            max-width: 900px;
             margin: 20px auto;
             background: white;
             box-shadow: 0 0 20px rgba(0,0,0,0.1);
-            display: grid;
-            grid-template-columns: 1fr 2fr;
             min-height: 100vh;
         }
 
+        .header {
+            padding: 25px 30px 15px 30px;
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .content-columns {
+            display: grid;
+            grid-template-columns: 1fr 2.5fr;
+        }
+
         .left-column {
-            padding: 40px 30px;
+            background-color: #f8f9fa;
+            padding: 30px 30px;
             border-right: 1px solid #e9ecef;
         }
 
         .right-column {
-            padding: 40px 30px;
-        }
-
-        .header {
-            margin-bottom: 40px;
+            padding: 30px 30px;
         }
 
         .name {
@@ -50,7 +56,11 @@
         }
 
         .section {
-            margin-bottom: 40px;
+            margin-bottom: 20px;
+        }
+
+        .section:not(:last-child) {
+            border-bottom: 1px solid #e9ecef;
         }
 
         .section-title {
@@ -66,11 +76,16 @@
 
         .detail-item {
             margin-bottom: 15px;
+            display: flex;
         }
 
         .detail-label {
             font-size: 0.9rem;
             margin-bottom: 5px;
+            min-width: 20px;
+            margin-right: 10px;
+            display: flex;
+            align-items: center;
         }
 
         .detail-label i {
@@ -82,6 +97,15 @@
             color: #666;
             line-height: 1.4;
             letter-spacing: 0.5px;
+            flex: 1;
+        }
+
+        .profile-text {
+            font-size: 0.95rem;
+            color: #555;
+            line-height: 1.6;
+            text-align: justify;
+            margin-bottom: 20px;
         }
 
         .skill-item {
@@ -129,9 +153,8 @@
         }
 
         .experience-item, .education-item {
-            margin-bottom: 30px;
+            margin-bottom: 10px;
             padding-bottom: 20px;
-            border-bottom: 1px solid #e9ecef;
         }
 
         .experience-item:last-child, .education-item:last-child {
@@ -178,14 +201,39 @@
             font-size: 0.85rem;
         }
 
+        .job-description {
+            margin-top: 10px;
+        }
+
+        .job-description ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .job-description li {
+            font-size: 0.9rem;
+            color: #555;
+            line-height: 1.5;
+            margin-bottom: 8px;
+            padding-left: 15px;
+            position: relative;
+        }
+
+        .job-description li::before {
+            content: "•";
+            color: #333;
+            position: absolute;
+            left: 0;
+            font-weight: bold;
+        }
+
         a {
             color: #666;
         }
 
         @media (max-width: 768px) {
-            .resume-container {
+            .content-columns {
                 grid-template-columns: 1fr;
-                margin: 10px;
             }
             
             .name {
