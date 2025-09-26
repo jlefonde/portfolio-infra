@@ -124,3 +124,104 @@ resource "aws_route53_record" "cloudfront_ipv6" {
     evaluate_target_health = false
   }
 }
+# {
+#     "Version": "2012-10-17",
+#     "Statement": [
+#         {
+#             "Effect": "Allow",
+#             "Action": [
+#                 "dynamodb:BatchGetItem",
+#                 "dynamodb:GetItem",
+#                 "dynamodb:Query",
+#                 "dynamodb:Scan",
+#                 "dynamodb:BatchWriteItem",
+#                 "dynamodb:PutItem",
+#                 "dynamodb:UpdateItem"
+#             ],
+#             "Resource": "arn:aws:dynamodb:us-east-1:640983357613:table/VisitorCount"
+#         },
+#         {
+#             "Effect": "Allow",
+#             "Action": [
+#                 "logs:CreateLogStream",
+#                 "logs:PutLogEvents"
+#             ],
+#             "Resource": "arn:aws:logs:us-east-1:640983357613:*"
+#         },
+#         {
+#             "Effect": "Allow",
+#             "Action": "logs:CreateLogGroup",
+#             "Resource": "*"
+#         }
+#     ]
+# }
+data "aws_iam_policy_document" "" {
+  statement {
+    effect = "Allow"
+    actions = [
+      "dynamodb:BatchGetItem",
+      "dynamodb:GetItem",
+      "dynamodb:Query",
+      "dynamodb:Scan",
+      "dynamodb:BatchWriteItem",
+      "dynamodb:PutItem",
+      "dynamodb:UpdateItem"
+    ]
+    
+    resources = []
+  }
+}
+
+# locals {
+#   api_config = yamldecode(file("../../config/api_definition.yml"))
+#   lamda_function = { 
+#     for route in local.api_config.api.routes :
+#       route.function => route.function
+#   }
+# }
+
+# resource "aws_apigatewayv2_api" "primary" {
+#   name = "${var.domain_name}-api"
+#   protocol_type = "HTTP"
+#   ip_address_type = "dualstack"
+#   description = "HTTP API with Lambda integrations"
+
+#   cors_configuration {
+#     allow_origins = ["https://${var.domain_name}"]
+#     allow_methods = ["GET", "POST", "OPTIONS"]
+#   }
+
+#   tags = {
+#     Environment = var.environment
+#   }
+# }
+
+# resource "aws_lambda_function" "api" {
+#   for_each = local.lamda_function
+
+#   function_name = each.key
+#   role = 
+# }
+
+# resource "aws_apigatewayv2_integration" "primary" {
+#   for_each = {
+#     for route in local.api_config.api.routes :
+#       "${route.method} ${route.path}" => route
+#   }
+
+#   api_id = aws_apigatewayv2_api.primary.id
+#   integration_type = "HTTP_PROXY"
+#   integration_method = each.value.method
+# }
+
+# resource "aws_apigatewayv2_route" "primary" {
+#   for_each = {
+#     for route in local.api_config.api.routes :
+#       "${route.method} ${route.path}" => route
+#   }
+
+#   api_id = aws_apigatewayv2_api.primary.id
+#   route_key = "${each.value.method} ${each.value.path}"
+
+#   target = "integrations/${aws_apigatewayv2_integration.primary[each.key].id}"
+# }
