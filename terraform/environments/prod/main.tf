@@ -2,17 +2,26 @@ provider "aws" {
   region = "eu-central-1"
 }
 
-resource "aws_s3_bucket" "frontend" {
-  bucket = "${var.domain_name}-frontend"
-
-  tags = {
+locals {
+  common_tags = {
     Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "Terraform"
   }
+
+  frontend_bucket_name = "${var.domain_name}-frontend"
+  backend_bucket_name  = "${var.domain_name}-backen"
+}
+
+resource "aws_s3_bucket" "frontend" {
+  bucket = local.frontend_bucket_name
+
+  tags = merge(local.common_tags, {
+    Name = local.frontend_bucket_name
+  })
 }
 
 data "aws_iam_policy_document" "cloudfront_s3_access" {
-  policy_id = "PolicyForCloudFrontPrivateContent"
-
   statement {
     sid    = "AllowCloudFrontServicePrincipal"
     effect = "Allow"
@@ -85,7 +94,7 @@ resource "aws_cloudfront_distribution" "frontend" {
 
   viewer_certificate {
     acm_certificate_arn = data.aws_acm_certificate.frontend.arn
-    ssl_support_method = "sni-only"
+    ssl_support_method  = "sni-only"
   }
 
   enabled             = true
@@ -94,9 +103,7 @@ resource "aws_cloudfront_distribution" "frontend" {
   comment             = "CloudFront distribution to distribute frontend"
   default_root_object = "index.html"
 
-  tags = {
-    Environment = var.environment
-  }
+  tags = local.common_tags
 }
 
 data "aws_route53_zone" "primary" {
@@ -124,40 +131,71 @@ resource "aws_route53_record" "cloudfront_ipv6" {
     evaluate_target_health = false
   }
 }
-# {
-#     "Version": "2012-10-17",
-#     "Statement": [
-#         {
-#             "Effect": "Allow",
-#             "Action": [
-#                 "dynamodb:BatchGetItem",
-#                 "dynamodb:GetItem",
-#                 "dynamodb:Query",
-#                 "dynamodb:Scan",
-#                 "dynamodb:BatchWriteItem",
-#                 "dynamodb:PutItem",
-#                 "dynamodb:UpdateItem"
-#             ],
-#             "Resource": "arn:aws:dynamodb:us-east-1:640983357613:table/VisitorCount"
-#         },
-#         {
-#             "Effect": "Allow",
-#             "Action": [
-#                 "logs:CreateLogStream",
-#                 "logs:PutLogEvents"
-#             ],
-#             "Resource": "arn:aws:logs:us-east-1:640983357613:*"
-#         },
-#         {
-#             "Effect": "Allow",
-#             "Action": "logs:CreateLogGroup",
-#             "Resource": "*"
-#         }
-#     ]
-# }
-data "aws_iam_policy_document" "" {
+
+resource "aws_dynamodb_table" "tables" {
+  for_each = var.dynamodb_tables
+
+  name      = "${var.project_name}-${var.environment}-${each.key}"
+  hash_key  = each.value.hash_key
+  range_key = each.value.range_key
+
+  billing_mode   = each.value.billing_mode
+  read_capacity  = each.value.read_capacity
+  write_capacity = each.value.write_capacity
+
+  dynamic "attribute" {
+    for_each = each.value.attributes
+
+    content {
+      name = attribute.value.name
+      type = attribute.value.type
+    }
+  }
+
+  dynamic "global_secondary_index" {
+    for_each = each.value.global_secondary_indexes != null ? each.value.global_secondary_indexes : []
+
+    content {
+      name            = global_secondary_index.value.name
+      hash_key        = global_secondary_index.value.hash_key
+      range_key       = global_secondary_index.value.range_key
+      projection_type = global_secondary_index.value.projection_type
+    }
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "${var.project_name}-${var.environment}-${each.key}"
+  })
+}
+
+resource "aws_s3_bucket" "backend" {
+  bucket = local.backend_bucket_name
+
+  tags = merge(local.common_tags, {
+    Name = local.backend_bucket_name
+  })
+}
+
+data "aws_iam_policy_document" "lambda_assume_role" {
   statement {
+    sid    = "AllowLambdaServiceAssumeRole"
     effect = "Allow"
+
+    principals {
+      type        = "Service"
+      identifiers = ["lambda.amazonaws.com"]
+    }
+
+    actions = ["sts:AssumeRole"]
+  }
+}
+
+// TODO: add CreateLogStream/PutLogEvents, CreateLogGroup + combine with this one
+data "aws_iam_policy_document" "lambda_dynamodb_access" {
+  statement {
+    sid    = "AllowLambdaServiceAccessDynamoDb"
+    effect = "Allow"
+
     actions = [
       "dynamodb:BatchGetItem",
       "dynamodb:GetItem",
@@ -167,9 +205,28 @@ data "aws_iam_policy_document" "" {
       "dynamodb:PutItem",
       "dynamodb:UpdateItem"
     ]
-    
-    resources = []
+
+    resources = [aws_dynamodb_table.tables["visitor_count"].arn]
   }
+}
+
+resource "aws_iam_policy" "lambda_api" {
+  name   = "lambda-api-policy"
+  policy = data.aws_iam_policy_document.lambda_dynamodb_access.json
+
+  tags = local.common_tags
+}
+
+resource "aws_iam_role" "lambda_api" {
+  name               = "lamdba-api-role"
+  assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
+
+  tags = local.common_tags
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_api_attach" {
+  role       = aws_iam_role.lambda_api.name
+  policy_arn = aws_iam_policy.lambda_api.arn
 }
 
 # locals {
@@ -194,13 +251,6 @@ data "aws_iam_policy_document" "" {
 #   tags = {
 #     Environment = var.environment
 #   }
-# }
-
-# resource "aws_lambda_function" "api" {
-#   for_each = local.lamda_function
-
-#   function_name = each.key
-#   role = 
 # }
 
 # resource "aws_apigatewayv2_integration" "primary" {

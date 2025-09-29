@@ -1,3 +1,8 @@
+variable "project_name" {
+  description = "The project name"
+  type        = string
+}
+
 variable "region" {
   description = "The AWS region where resources will be deployed (e.g., eu-central-1, us-east-1)"
   type        = string
@@ -36,4 +41,30 @@ variable "cloudfront_default_ttl" {
 variable "cloudfront_max_ttl" {
   description = "Maximum TTL for CloudFront's default cache behavior"
   type        = number
+}
+
+variable "dynamodb_tables" {
+  description = "Configuration for DynamoDB tables"
+  type = map(object({
+    hash_key  = string
+    range_key = optional(string)
+
+    billing_mode   = string
+    read_capacity  = optional(number)
+    write_capacity = optional(number)
+
+    attributes = list(object({
+      name = string
+      type = string
+    }))
+
+    global_secondary_indexes = optional(list(object({
+      name            = string
+      hash_key        = string
+      range_key       = optional(string)
+      projection_type = string
+    })))
+  }))
+
+  default = {}
 }
