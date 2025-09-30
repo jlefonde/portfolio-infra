@@ -8,17 +8,12 @@ locals {
     Project     = var.project_name
     ManagedBy   = "Terraform"
   }
-
-  frontend_bucket_name = "${var.domain_name}-frontend"
-  backend_bucket_name  = "${var.domain_name}-backen"
 }
 
 resource "aws_s3_bucket" "frontend" {
-  bucket = local.frontend_bucket_name
+  bucket = "${var.domain_name}-frontend"
 
-  tags = merge(local.common_tags, {
-    Name = local.frontend_bucket_name
-  })
+  tags = local.common_tags
 }
 
 data "aws_iam_policy_document" "cloudfront_s3_access" {
@@ -169,11 +164,15 @@ resource "aws_dynamodb_table" "tables" {
 }
 
 resource "aws_s3_bucket" "backend" {
-  bucket = local.backend_bucket_name
+  bucket = "${var.domain_name}-backend"
 
-  tags = merge(local.common_tags, {
-    Name = local.backend_bucket_name
-  })
+  tags = local.common_tags
+}
+
+resource "aws_s3_object" "bootstrap_lambda" {
+  bucket = aws_s3_bucket.backend.bucket
+  key    = "bootstrap/bootstrap.zip"
+  source = "../../lambda/bootstrap/bootstrap.zip"
 }
 
 data "aws_iam_policy_document" "lambda_assume_role" {
@@ -229,6 +228,37 @@ resource "aws_iam_role_policy_attachment" "lambda_api_attach" {
   policy_arn = aws_iam_policy.lambda_api.arn
 }
 
+resource "aws_ssm_parameter" "lambda_s3_key" {
+  name  = "/lambda/visitor-count/${var.environment}/s3-key"
+  type  = "String"
+  value = "bootstrap/bootstrap.zip"
+
+  lifecycle {
+    ignore_changes = [
+      value,
+    ]
+  }
+}
+
+resource "aws_lambda_function" "api" {
+  function_name = "visitor-count-${var.environment}"
+  role          = aws_iam_role.lambda_api.arn
+  publish       = true
+
+  s3_bucket = aws_s3_bucket.backend.bucket
+  s3_key    = aws_ssm_parameter.lambda_s3_key.value
+
+  handler = "bootstrap"
+  runtime = "provided.al2"
+
+  tags = local.common_tags
+
+  depends_on = [aws_s3_object.bootstrap_lambda]
+  lifecycle {
+    ignore_changes = [s3_key, source_code_hash]
+  }
+}
+
 # locals {
 #   api_config = yamldecode(file("../../config/api_definition.yml"))
 #   lamda_function = { 
@@ -237,21 +267,49 @@ resource "aws_iam_role_policy_attachment" "lambda_api_attach" {
 #   }
 # }
 
-# resource "aws_apigatewayv2_api" "primary" {
-#   name = "${var.domain_name}-api"
-#   protocol_type = "HTTP"
-#   ip_address_type = "dualstack"
-#   description = "HTTP API with Lambda integrations"
+resource "aws_apigatewayv2_api" "primary" {
+  name            = "${var.domain_name}-api"
+  protocol_type   = "HTTP"
+  ip_address_type = "dualstack"
+  description     = "HTTP API with Lambda integrations"
 
-#   cors_configuration {
-#     allow_origins = ["https://${var.domain_name}"]
-#     allow_methods = ["GET", "POST", "OPTIONS"]
-#   }
+  cors_configuration {
+    allow_origins = ["https://${var.domain_name}"]
+    allow_methods = ["GET", "POST", "OPTIONS"]
+  }
 
-#   tags = {
-#     Environment = var.environment
-#   }
-# }
+  tags = local.common_tags
+}
+
+resource "aws_apigatewayv2_integration" "get_visitor_count" {
+  api_id                 = aws_apigatewayv2_api.primary.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.api.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_integration" "post_visitor_count" {
+  api_id                 = aws_apigatewayv2_api.primary.id
+  integration_type       = "AWS_PROXY"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.api.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "get_visitor_count" {
+  api_id    = aws_apigatewayv2_api.primary.id
+  route_key = "GET /visitor-count/{id}"
+
+  target = "integrations/${aws_apigatewayv2_integration.get_visitor_count.id}"
+}
+
+resource "aws_apigatewayv2_route" "post_visitor_count" {
+  api_id    = aws_apigatewayv2_api.primary.id
+  route_key = "POST /visitor-count/{id}"
+
+  target = "integrations/${aws_apigatewayv2_integration.post_visitor_count.id}"
+}
 
 # resource "aws_apigatewayv2_integration" "primary" {
 #   for_each = {

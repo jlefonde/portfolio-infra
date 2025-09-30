@@ -1,3 +1,6 @@
+build-boostrap-lambda:
+	cd lambda/bootstrap && GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o bootstrap main.go && zip bootstrap.zip bootstrap 
+
 init-prod:
 	cd environments/prod && terraform init -backend-config="../../state.config"
 
