@@ -259,14 +259,6 @@ resource "aws_lambda_function" "api" {
   }
 }
 
-# locals {
-#   api_config = yamldecode(file("../../config/api_definition.yml"))
-#   lamda_function = { 
-#     for route in local.api_config.api.routes :
-#       route.function => route.function
-#   }
-# }
-
 resource "aws_apigatewayv2_api" "primary" {
   name            = "${var.domain_name}-api"
   protocol_type   = "HTTP"
@@ -281,15 +273,7 @@ resource "aws_apigatewayv2_api" "primary" {
   tags = local.common_tags
 }
 
-resource "aws_apigatewayv2_integration" "get_visitor_count" {
-  api_id                 = aws_apigatewayv2_api.primary.id
-  integration_type       = "AWS_PROXY"
-  integration_method     = "POST"
-  integration_uri        = aws_lambda_function.api.invoke_arn
-  payload_format_version = "2.0"
-}
-
-resource "aws_apigatewayv2_integration" "post_visitor_count" {
+resource "aws_apigatewayv2_integration" "visitor_count" {
   api_id                 = aws_apigatewayv2_api.primary.id
   integration_type       = "AWS_PROXY"
   integration_method     = "POST"
@@ -301,35 +285,12 @@ resource "aws_apigatewayv2_route" "get_visitor_count" {
   api_id    = aws_apigatewayv2_api.primary.id
   route_key = "GET /visitor-count/{id}"
 
-  target = "integrations/${aws_apigatewayv2_integration.get_visitor_count.id}"
+  target = "integrations/${aws_apigatewayv2_integration.visitor_count.id}"
 }
 
 resource "aws_apigatewayv2_route" "post_visitor_count" {
   api_id    = aws_apigatewayv2_api.primary.id
   route_key = "POST /visitor-count/{id}"
 
-  target = "integrations/${aws_apigatewayv2_integration.post_visitor_count.id}"
+  target = "integrations/${aws_apigatewayv2_integration.visitor_count.id}"
 }
-
-# resource "aws_apigatewayv2_integration" "primary" {
-#   for_each = {
-#     for route in local.api_config.api.routes :
-#       "${route.method} ${route.path}" => route
-#   }
-
-#   api_id = aws_apigatewayv2_api.primary.id
-#   integration_type = "HTTP_PROXY"
-#   integration_method = each.value.method
-# }
-
-# resource "aws_apigatewayv2_route" "primary" {
-#   for_each = {
-#     for route in local.api_config.api.routes :
-#       "${route.method} ${route.path}" => route
-#   }
-
-#   api_id = aws_apigatewayv2_api.primary.id
-#   route_key = "${each.value.method} ${each.value.path}"
-
-#   target = "integrations/${aws_apigatewayv2_integration.primary[each.key].id}"
-# }
