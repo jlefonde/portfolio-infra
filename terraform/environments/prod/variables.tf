@@ -48,6 +48,11 @@ variable "cloudfront_max_ttl" {
   type        = number
 }
 
+variable "verified_origin_rotation" {
+  description = "Number of days between automatic scheduled secret rotation"
+  type        = number
+}
+
 variable "lambda_log_retention" {
   description = "Number of days to retain log events for lambda"
   type        = number

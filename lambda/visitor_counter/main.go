@@ -175,7 +175,7 @@ func requestHandler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (ev
 }
 
 func init() {
-	cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion("us-east-1"))
+	cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion("eu-central-1"))
 	if err != nil {
 		panic(fmt.Sprintf("failed to config: %v", err))
 	}

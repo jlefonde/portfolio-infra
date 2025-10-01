@@ -211,15 +211,17 @@ data "aws_iam_policy_document" "lambda_logs" {
   statement {
     sid    = "AllowLambdaServiceWriteLogs"
     effect = "Allow"
+
     actions = [
       "logs:CreateLogStream",
       "logs:PutLogEvents"
     ]
+
     resources = ["${aws_cloudwatch_log_group.lambda.arn}:*"]
   }
 }
 
-data "aws_iam_policy_document" "lambda" {
+data "aws_iam_policy_document" "lambda_api" {
   source_policy_documents = [
     data.aws_iam_policy_document.lambda_dynamodb_access.json,
     data.aws_iam_policy_document.lambda_logs.json,
@@ -228,7 +230,7 @@ data "aws_iam_policy_document" "lambda" {
 
 resource "aws_iam_policy" "lambda_api" {
   name   = "lambda-api-policy"
-  policy = data.aws_iam_policy_document.lambda.json
+  policy = data.aws_iam_policy_document.lambda_api.json
 }
 
 resource "aws_iam_role" "lambda_api" {
@@ -236,7 +238,7 @@ resource "aws_iam_role" "lambda_api" {
   assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
 }
 
-resource "aws_iam_role_policy_attachment" "lambda_api_attach" {
+resource "aws_iam_role_policy_attachment" "lambda_api" {
   role       = aws_iam_role.lambda_api.name
   policy_arn = aws_iam_policy.lambda_api.arn
 }
@@ -334,4 +336,63 @@ resource "aws_apigatewayv2_route" "post_visitor_count" {
   route_key = "POST /visitor-count/{id}"
 
   target = "integrations/${aws_apigatewayv2_integration.visitor_count.id}"
+}
+
+
+resource "aws_iam_policy_document" "lambda_rotate_verified_origin" {
+  source_policy_documents = [
+    # data.aws_iam_policy_document.lambda_dynamodb_access.json,
+    # data.aws_iam_policy_document.lambda_logs.json,
+  ]
+}
+
+resource "aws_iam_policy" "lambda_rotate_verified_origin" {
+  name = "lambda-rotate-verified-origin-policy"
+  policy = aws_iam_policy_document.lambda_rotate_verified_origin.json
+}
+
+resource "aws_iam_role" "lambda_rotate_verified_origin" {
+  name               = "lamdba-rotate-verified-origin-role"
+  assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
+}
+
+# resource "aws_iam_role_policy_attachment" "lambda_rotate_verified_origin" {
+#   role = aws_iam_role.lambda_rotate_verified_origin.name
+#   policy_arn = 
+# }
+
+data "archive_file" "verified_origin_rotation" {
+  type        = "zip"
+  source_file = "${path.module}/../../lambda/verified_origin_rotation/bootstrap"
+  output_path = "${path.module}/../../lambda/verified_origin_rotation/verified_origin_rotation.zip"
+}
+
+resource "aws_lambda_function" "verified_origin_rotation" {
+  function_name = "rotate-verified-origin-${var.environment}"
+  role          = aws_iam_role.lambda_api.arn
+  publish       = true
+
+  filename = data.archive_file.verified_origin_rotation.output_path
+  handler = "bootstrap"
+  runtime = "provided.al2"
+
+  environment {
+    variables = {
+      ENVIRONMENT = var.environment
+    }
+  }
+}
+
+resource "aws_secretsmanager_secret" "verified_origin" {
+  name = "verified-origin-${var.environment}"
+  description = "Verify the origin of API requests. Automatically generated and rotated by Terraform."
+}
+
+resource "aws_secretsmanager_secret_rotation" "verified_origin" {
+  secret_id = aws_secretsmanager_secret.verified_origin.id
+  rotation_lambda_arn = aws_lambda_function.verified_origin_rotation.arn
+
+  rotation_rules {
+    automatically_after_days = var.verified_origin_rotation
+  }
 }
