@@ -34,6 +34,11 @@ data "aws_acm_certificate" "frontend" {
   statuses = ["ISSUED"]
 }
 
+data "aws_acm_certificate" "backend" {
+  domain   = var.acm_wildcard
+  statuses = ["ISSUED"]
+}
+
 resource "aws_cloudfront_origin_access_control" "default" {
   name                              = "default-oac"
   origin_access_control_origin_type = "s3"
@@ -86,7 +91,7 @@ resource "aws_cloudfront_distribution" "frontend" {
 }
 
 data "aws_route53_zone" "primary" {
-  name = var.domain_name
+  name = var.zone_name
 }
 
 resource "aws_route53_record" "cloudfront_ipv4" {
@@ -151,10 +156,17 @@ resource "aws_s3_bucket" "backend" {
   bucket = "${var.domain_name}-backend"
 }
 
+data "archive_file" "bootstrap_lambda" {
+  type = "zip"
+  source_file = "${path.module}/../../lambda/bootstrap/bootstrap"
+  output_path = "${path.module}/../../lambda/bootstrap/bootstrap.zip"
+}
+
 resource "aws_s3_object" "bootstrap_lambda" {
   bucket = aws_s3_bucket.backend.bucket
   key    = "bootstrap/bootstrap.zip"
-  source = "../../lambda/bootstrap/bootstrap.zip"
+  source = data.archive_file.bootstrap_lambda.output_path
+  source_hash = data.archive_file.bootstrap_lambda.output_base64sha256
 }
 
 data "aws_iam_policy_document" "lambda_assume_role" {
@@ -239,6 +251,44 @@ resource "aws_apigatewayv2_api" "primary" {
     allow_origins = ["https://${var.domain_name}"]
     allow_methods = ["GET", "POST", "OPTIONS"]
   }
+}
+
+resource "aws_apigatewayv2_stage" "default" {
+  api_id = aws_apigatewayv2_api.primary.id
+  name = "$default"
+  auto_deploy = true
+}
+
+resource "aws_apigatewayv2_domain_name" "primary" {
+  domain_name = "api.${var.domain_name}"
+
+  domain_name_configuration {
+    certificate_arn = data.aws_acm_certificate.backend.arn
+    endpoint_type = "REGIONAL"
+    security_policy = "TLS_1_2"
+  }
+}
+
+resource "aws_apigatewayv2_api_mapping" "name" {
+  api_id = aws_apigatewayv2_api.primary.id
+  domain_name = aws_apigatewayv2_domain_name.primary.domain_name
+  stage = aws_apigatewayv2_stage.default.id
+}
+
+resource "aws_route53_record" "api" {
+  zone_id = data.aws_route53_zone.primary.zone_id
+  name    = aws_apigatewayv2_domain_name.primary.domain_name
+  type    = "CNAME"
+  ttl     = 300
+  records = [aws_apigatewayv2_domain_name.primary.domain_name_configuration[0].target_domain_name]
+}
+
+resource "aws_lambda_permission" "apigateway_invoke" {
+  statement_id = "AllowAPIGatewayInvoke"
+  function_name =  aws_lambda_function.api.function_name
+  action = "lambda:InvokeFunction"
+  principal = "apigateway.amazonaws.com"
+  source_arn = "${aws_apigatewayv2_api.primary.execution_arn}/*/*/visitor-count/{id}"
 }
 
 resource "aws_apigatewayv2_integration" "visitor_count" {

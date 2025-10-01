@@ -8,6 +8,11 @@ variable "region" {
   type        = string
 }
 
+variable "zone_name" {
+  description = "The Route53 zone name"
+  type        = string
+}
+
 variable "domain_name" {
   description = "The root domain name for the frontend website"
   type        = string

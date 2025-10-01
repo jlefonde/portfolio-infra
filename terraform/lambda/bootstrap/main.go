@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
@@ -17,11 +16,7 @@ func main() {
 			Headers: map[string]string{
 				"Content-Type": "application/json",
 			},
-			Body: fmt.Sprintf(`{
-				"error": "Service Unavailable",
-				"message": "Application deployment in progress",
-				"timestamp": "%s",
-			}`, time.Now().UTC().Format(time.RFC3339)),
+			Body: fmt.Sprintf(`{"message": "%s"}`, http.StatusText(http.StatusServiceUnavailable)),
 		}, nil
 	})
 }
