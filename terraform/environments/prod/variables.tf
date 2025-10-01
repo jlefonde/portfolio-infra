@@ -48,6 +48,11 @@ variable "cloudfront_max_ttl" {
   type        = number
 }
 
+variable "lambda_log_retention" {
+  description = "Number of days to retain log events for lambda"
+  type        = number
+}
+
 variable "dynamodb_tables" {
   description = "Configuration for DynamoDB tables"
   type = map(object({

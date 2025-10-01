@@ -157,15 +157,15 @@ resource "aws_s3_bucket" "backend" {
 }
 
 data "archive_file" "bootstrap_lambda" {
-  type = "zip"
+  type        = "zip"
   source_file = "${path.module}/../../lambda/bootstrap/bootstrap"
   output_path = "${path.module}/../../lambda/bootstrap/bootstrap.zip"
 }
 
 resource "aws_s3_object" "bootstrap_lambda" {
-  bucket = aws_s3_bucket.backend.bucket
-  key    = "bootstrap/bootstrap.zip"
-  source = data.archive_file.bootstrap_lambda.output_path
+  bucket      = aws_s3_bucket.backend.bucket
+  key         = "bootstrap/bootstrap.zip"
+  source      = data.archive_file.bootstrap_lambda.output_path
   source_hash = data.archive_file.bootstrap_lambda.output_base64sha256
 }
 
@@ -183,7 +183,6 @@ data "aws_iam_policy_document" "lambda_assume_role" {
   }
 }
 
-// TODO: add CreateLogStream/PutLogEvents, CreateLogGroup + combine with this one
 data "aws_iam_policy_document" "lambda_dynamodb_access" {
   statement {
     sid    = "AllowLambdaServiceAccessDynamoDb"
@@ -203,9 +202,33 @@ data "aws_iam_policy_document" "lambda_dynamodb_access" {
   }
 }
 
+resource "aws_cloudwatch_log_group" "lambda" {
+  name              = "/aws/lambda/visitor_count"
+  retention_in_days = var.lambda_log_retention
+}
+
+data "aws_iam_policy_document" "lambda_logs" {
+  statement {
+    sid    = "AllowLambdaServiceWriteLogs"
+    effect = "Allow"
+    actions = [
+      "logs:CreateLogStream",
+      "logs:PutLogEvents"
+    ]
+    resources = ["${aws_cloudwatch_log_group.lambda.arn}:*"]
+  }
+}
+
+data "aws_iam_policy_document" "lambda" {
+  source_policy_documents = [
+    data.aws_iam_policy_document.lambda_dynamodb_access.json,
+    data.aws_iam_policy_document.lambda_logs.json,
+  ]
+}
+
 resource "aws_iam_policy" "lambda_api" {
   name   = "lambda-api-policy"
-  policy = data.aws_iam_policy_document.lambda_dynamodb_access.json
+  policy = data.aws_iam_policy_document.lambda.json
 }
 
 resource "aws_iam_role" "lambda_api" {
@@ -254,8 +277,8 @@ resource "aws_apigatewayv2_api" "primary" {
 }
 
 resource "aws_apigatewayv2_stage" "default" {
-  api_id = aws_apigatewayv2_api.primary.id
-  name = "$default"
+  api_id      = aws_apigatewayv2_api.primary.id
+  name        = "$default"
   auto_deploy = true
 }
 
@@ -264,15 +287,15 @@ resource "aws_apigatewayv2_domain_name" "primary" {
 
   domain_name_configuration {
     certificate_arn = data.aws_acm_certificate.backend.arn
-    endpoint_type = "REGIONAL"
+    endpoint_type   = "REGIONAL"
     security_policy = "TLS_1_2"
   }
 }
 
 resource "aws_apigatewayv2_api_mapping" "name" {
-  api_id = aws_apigatewayv2_api.primary.id
+  api_id      = aws_apigatewayv2_api.primary.id
   domain_name = aws_apigatewayv2_domain_name.primary.domain_name
-  stage = aws_apigatewayv2_stage.default.id
+  stage       = aws_apigatewayv2_stage.default.id
 }
 
 resource "aws_route53_record" "api" {
@@ -284,11 +307,11 @@ resource "aws_route53_record" "api" {
 }
 
 resource "aws_lambda_permission" "apigateway_invoke" {
-  statement_id = "AllowAPIGatewayInvoke"
-  function_name =  aws_lambda_function.api.function_name
-  action = "lambda:InvokeFunction"
-  principal = "apigateway.amazonaws.com"
-  source_arn = "${aws_apigatewayv2_api.primary.execution_arn}/*/*/visitor-count/{id}"
+  statement_id  = "AllowAPIGatewayInvoke"
+  function_name = aws_lambda_function.api.function_name
+  action        = "lambda:InvokeFunction"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.primary.execution_arn}/*/*/visitor-count/{id}"
 }
 
 resource "aws_apigatewayv2_integration" "visitor_count" {
