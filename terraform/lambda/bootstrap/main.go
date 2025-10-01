@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/aws/aws-lambda-go/events"
@@ -22,8 +21,7 @@ func main() {
 				"error": "Service Unavailable",
 				"message": "Application deployment in progress",
 				"timestamp": "%s",
-				"environment": "%s"
-			}`, time.Now().UTC().Format(time.RFC3339), os.Getenv("ENVIRONMENT")),
+			}`, time.Now().UTC().Format(time.RFC3339)),
 		}, nil
 	})
 }

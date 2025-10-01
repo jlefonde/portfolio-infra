@@ -1,19 +1,5 @@
-provider "aws" {
-  region = "eu-central-1"
-}
-
-locals {
-  common_tags = {
-    Environment = var.environment
-    Project     = var.project_name
-    ManagedBy   = "Terraform"
-  }
-}
-
 resource "aws_s3_bucket" "frontend" {
   bucket = "${var.domain_name}-frontend"
-
-  tags = local.common_tags
 }
 
 data "aws_iam_policy_document" "cloudfront_s3_access" {
@@ -97,8 +83,6 @@ resource "aws_cloudfront_distribution" "frontend" {
   aliases             = [var.domain_name]
   comment             = "CloudFront distribution to distribute frontend"
   default_root_object = "index.html"
-
-  tags = local.common_tags
 }
 
 data "aws_route53_zone" "primary" {
@@ -158,15 +142,13 @@ resource "aws_dynamodb_table" "tables" {
     }
   }
 
-  tags = merge(local.common_tags, {
+  tags = {
     Name = "${var.project_name}-${var.environment}-${each.key}"
-  })
+  }
 }
 
 resource "aws_s3_bucket" "backend" {
   bucket = "${var.domain_name}-backend"
-
-  tags = local.common_tags
 }
 
 resource "aws_s3_object" "bootstrap_lambda" {
@@ -212,32 +194,16 @@ data "aws_iam_policy_document" "lambda_dynamodb_access" {
 resource "aws_iam_policy" "lambda_api" {
   name   = "lambda-api-policy"
   policy = data.aws_iam_policy_document.lambda_dynamodb_access.json
-
-  tags = local.common_tags
 }
 
 resource "aws_iam_role" "lambda_api" {
   name               = "lamdba-api-role"
   assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
-
-  tags = local.common_tags
 }
 
 resource "aws_iam_role_policy_attachment" "lambda_api_attach" {
   role       = aws_iam_role.lambda_api.name
   policy_arn = aws_iam_policy.lambda_api.arn
-}
-
-resource "aws_ssm_parameter" "lambda_s3_key" {
-  name  = "/lambda/visitor-count/${var.environment}/s3-key"
-  type  = "String"
-  value = "bootstrap/bootstrap.zip"
-
-  lifecycle {
-    ignore_changes = [
-      value,
-    ]
-  }
 }
 
 resource "aws_lambda_function" "api" {
@@ -246,12 +212,16 @@ resource "aws_lambda_function" "api" {
   publish       = true
 
   s3_bucket = aws_s3_bucket.backend.bucket
-  s3_key    = aws_ssm_parameter.lambda_s3_key.value
+  s3_key    = "bootstrap/bootstrap.zip"
 
   handler = "bootstrap"
   runtime = "provided.al2"
 
-  tags = local.common_tags
+  environment {
+    variables = {
+      ENVIRONMENT = var.environment
+    }
+  }
 
   depends_on = [aws_s3_object.bootstrap_lambda]
   lifecycle {
@@ -269,8 +239,6 @@ resource "aws_apigatewayv2_api" "primary" {
     allow_origins = ["https://${var.domain_name}"]
     allow_methods = ["GET", "POST", "OPTIONS"]
   }
-
-  tags = local.common_tags
 }
 
 resource "aws_apigatewayv2_integration" "visitor_count" {
