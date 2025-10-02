@@ -119,7 +119,7 @@ resource "aws_route53_record" "cloudfront_ipv6" {
 resource "aws_dynamodb_table" "tables" {
   for_each = var.dynamodb_tables
 
-  name      = "${var.project_name}-${var.environment}-${each.key}"
+  name      = "${var.project_name}-${each.key}"
   hash_key  = each.value.hash_key
   range_key = each.value.range_key
 
@@ -148,7 +148,7 @@ resource "aws_dynamodb_table" "tables" {
   }
 
   tags = {
-    Name = "${var.project_name}-${var.environment}-${each.key}"
+    Name = "${var.project_name}-${each.key}"
   }
 }
 
@@ -202,8 +202,8 @@ data "aws_iam_policy_document" "lambda_dynamodb_access" {
   }
 }
 
-resource "aws_cloudwatch_log_group" "lambda" {
-  name              = "/aws/lambda/visitor_count"
+resource "aws_cloudwatch_log_group" "lambda_visitor_count" {
+  name              = "/aws/lambda/visitor-count"
   retention_in_days = var.lambda_log_retention
 }
 
@@ -217,7 +217,7 @@ data "aws_iam_policy_document" "lambda_logs" {
       "logs:PutLogEvents"
     ]
 
-    resources = ["${aws_cloudwatch_log_group.lambda.arn}:*"]
+    resources = ["${aws_cloudwatch_log_group.lambda_visitor_count.arn}:*"]
   }
 }
 
@@ -244,7 +244,7 @@ resource "aws_iam_role_policy_attachment" "lambda_api" {
 }
 
 resource "aws_lambda_function" "api" {
-  function_name = "visitor-count-${var.environment}"
+  function_name = "visitor-count"
   role          = aws_iam_role.lambda_api.arn
   publish       = true
 
@@ -253,12 +253,6 @@ resource "aws_lambda_function" "api" {
 
   handler = "bootstrap"
   runtime = "provided.al2"
-
-  environment {
-    variables = {
-      ENVIRONMENT = var.environment
-    }
-  }
 
   depends_on = [aws_s3_object.bootstrap_lambda]
   lifecycle {
@@ -338,17 +332,73 @@ resource "aws_apigatewayv2_route" "post_visitor_count" {
   target = "integrations/${aws_apigatewayv2_integration.visitor_count.id}"
 }
 
+resource "aws_cloudwatch_log_group" "lambda_rotate_verified_origin" {
+  name              = "/aws/lambda/rotate-verified-origin"
+  retention_in_days = var.lambda_log_retention
+}
 
-resource "aws_iam_policy_document" "lambda_rotate_verified_origin" {
+data "aws_iam_policy_document" "get_random_password" {
+  statement {
+    sid = "AllowGetRandomPassword"
+    effect = "Allow"
+
+    actions = ["secretsmanager:GetRandomPassword"]
+
+    resources = ["*"]
+  }
+}
+
+data "aws_iam_policy_document" "lambda_update_verified_origin_secret" {
+  statement {
+    sid = "AllowLambdaServiceUpdateSecretsManager"
+    effect = "Allow"
+
+    actions = ["secretsmanager:UpdateSecret"]
+
+    resources = [aws_secretsmanager_secret.verified_origin.arn]
+  }
+}
+
+data "aws_iam_policy_document" "lambda_rotate_verified_origin_logs" {
+  statement {
+    sid    = "AllowLambdaServiceWriteLogs"
+    effect = "Allow"
+
+    actions = [
+      "logs:CreateLogStream",
+      "logs:PutLogEvents"
+    ]
+
+    resources = ["${aws_cloudwatch_log_group.lambda_rotate_verified_origin.arn}:*"]
+  }
+}
+
+data "aws_iam_policy_document" "lambda_cloudfront_access" {
+  statement {
+    sid    = "AllowLambdaServiceUpdateCloudFront"
+    effect = "Allow"
+
+    actions = [
+      "cloudfront:GetDistributionConfig",
+      "cloudfront:UpdateDistribution"
+    ]
+
+    resources = [aws_cloudfront_distribution.frontend.arn]
+  }
+}
+
+data "aws_iam_policy_document" "lambda_rotate_verified_origin" {
   source_policy_documents = [
-    # data.aws_iam_policy_document.lambda_dynamodb_access.json,
-    # data.aws_iam_policy_document.lambda_logs.json,
+    data.aws_iam_policy_document.get_random_password.json,
+    data.aws_iam_policy_document.lambda_update_verified_origin_secret.json,
+    data.aws_iam_policy_document.lambda_rotate_verified_origin_logs.json,
+    data.aws_iam_policy_document.lambda_cloudfront_access.json,
   ]
 }
 
 resource "aws_iam_policy" "lambda_rotate_verified_origin" {
   name = "lambda-rotate-verified-origin-policy"
-  policy = aws_iam_policy_document.lambda_rotate_verified_origin.json
+  policy = data.aws_iam_policy_document.lambda_rotate_verified_origin.json
 }
 
 resource "aws_iam_role" "lambda_rotate_verified_origin" {
@@ -356,41 +406,51 @@ resource "aws_iam_role" "lambda_rotate_verified_origin" {
   assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
 }
 
-# resource "aws_iam_role_policy_attachment" "lambda_rotate_verified_origin" {
-#   role = aws_iam_role.lambda_rotate_verified_origin.name
-#   policy_arn = 
-# }
-
-data "archive_file" "verified_origin_rotation" {
-  type        = "zip"
-  source_file = "${path.module}/../../lambda/verified_origin_rotation/bootstrap"
-  output_path = "${path.module}/../../lambda/verified_origin_rotation/verified_origin_rotation.zip"
+resource "aws_iam_role_policy_attachment" "lambda_rotate_verified_origin" {
+  role = aws_iam_role.lambda_rotate_verified_origin.name
+  policy_arn = aws_iam_policy.lambda_rotate_verified_origin.arn
 }
 
-resource "aws_lambda_function" "verified_origin_rotation" {
-  function_name = "rotate-verified-origin-${var.environment}"
-  role          = aws_iam_role.lambda_api.arn
+data "archive_file" "rotate_verified_origin" {
+  type        = "zip"
+  source_file = "${path.module}/../../lambda/rotate_verified_origin/bootstrap"
+  output_path = "${path.module}/../../lambda/rotate_verified_origin/rotate_verified_origin.zip"
+}
+
+resource "aws_lambda_function" "rotate_verified_origin" {
+  function_name = "rotate-verified-origin"
+  role          = aws_iam_role.lambda_rotate_verified_origin.arn
   publish       = true
 
-  filename = data.archive_file.verified_origin_rotation.output_path
+  filename = data.archive_file.rotate_verified_origin.output_path
+  source_code_hash = data.archive_file.rotate_verified_origin.output_base64sha256
   handler = "bootstrap"
   runtime = "provided.al2"
 
   environment {
     variables = {
-      ENVIRONMENT = var.environment
+      SECRET_ID = aws_secretsmanager_secret.verified_origin.name
+      CLOUDFRONT_DISTRIBUTION_ID = aws_cloudfront_distribution.frontend.id
+      ORIGIN_ID = var.frontend_origin_id
     }
   }
 }
 
+resource "aws_lambda_permission" "secretsmanager_invoke" {
+  statement_id  = "AllowSecretsManagerInvoke"
+  function_name = aws_lambda_function.rotate_verified_origin.function_name
+  action        = "lambda:InvokeFunction"
+  principal     = "secretsmanager.amazonaws.com"
+}
+
 resource "aws_secretsmanager_secret" "verified_origin" {
-  name = "verified-origin-${var.environment}"
+  name = "verified-origin"
   description = "Verify the origin of API requests. Automatically generated and rotated by Terraform."
 }
 
 resource "aws_secretsmanager_secret_rotation" "verified_origin" {
   secret_id = aws_secretsmanager_secret.verified_origin.id
-  rotation_lambda_arn = aws_lambda_function.verified_origin_rotation.arn
+  rotation_lambda_arn = aws_lambda_function.rotate_verified_origin.arn
 
   rotation_rules {
     automatically_after_days = var.verified_origin_rotation
