@@ -429,7 +429,6 @@ resource "aws_lambda_function" "rotate_verified_origin" {
 
   environment {
     variables = {
-      SECRET_ID = aws_secretsmanager_secret.verified_origin.name
       CLOUDFRONT_DISTRIBUTION_ID = aws_cloudfront_distribution.frontend.id
       ORIGIN_ID = var.frontend_origin_id
     }
