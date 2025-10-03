@@ -452,7 +452,7 @@ resource "aws_lambda_permission" "secretsmanager_invoke" {
 }
 
 resource "aws_secretsmanager_secret" "verified_origin" {
-  name = "verified-origin4"
+  name = "verified-origin-tmp"
   description = "Verify the origin of API requests"
 }
 
