@@ -419,8 +419,8 @@ resource "aws_iam_role_policy_attachment" "lambda_rotate_verified_origin" {
 
 data "archive_file" "rotate_verified_origin" {
   type        = "zip"
-  source_file = "${path.module}/../../lambda/rotate_verified_origin/bin/bootstrap"
-  output_path = "${path.module}/../../lambda/rotate_verified_origin/rotate_verified_origin.zip"
+  source_file = "${path.module}/../../lambda/rotate_secret/bin/rotate_verified_origin/bootstrap"
+  output_path = "${path.module}/../../lambda/rotate_secret/rotate_verified_origin.zip"
 }
 
 resource "aws_lambda_function" "rotate_verified_origin" {
@@ -438,6 +438,8 @@ resource "aws_lambda_function" "rotate_verified_origin" {
       CLOUDFRONT_DISTRIBUTION_ID = aws_cloudfront_distribution.frontend.id
       CLOUDFRONT_ORIGIN_ID = var.frontend_origin_id
       CLOUDFRONT_ORIGIN_HEADER_NAME = "x-origin-verify"
+      SECRET_PASSWORD_LENGTH = 32
+      SECRET_EXCLUDE_PUNCTUATION = true
     }
   }
 }
