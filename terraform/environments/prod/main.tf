@@ -353,7 +353,13 @@ data "aws_iam_policy_document" "lambda_update_verified_origin_secret" {
     sid = "AllowLambdaServiceUpdateSecretsManager"
     effect = "Allow"
 
-    actions = ["secretsmanager:UpdateSecret"]
+    actions = [
+      "secretsmanager:DescribeSecret",
+      "secretsmanager:UpdateSecret",
+      "secretsmanager:UpdateSecretVersionStage",
+      "secretsmanager:GetSecretValue",
+      "secretsmanager:PutSecretValue"
+    ]
 
     resources = [aws_secretsmanager_secret.verified_origin.arn]
   }
@@ -413,7 +419,7 @@ resource "aws_iam_role_policy_attachment" "lambda_rotate_verified_origin" {
 
 data "archive_file" "rotate_verified_origin" {
   type        = "zip"
-  source_file = "${path.module}/../../lambda/rotate_verified_origin/bootstrap"
+  source_file = "${path.module}/../../lambda/rotate_verified_origin/bin/bootstrap"
   output_path = "${path.module}/../../lambda/rotate_verified_origin/rotate_verified_origin.zip"
 }
 
@@ -430,7 +436,8 @@ resource "aws_lambda_function" "rotate_verified_origin" {
   environment {
     variables = {
       CLOUDFRONT_DISTRIBUTION_ID = aws_cloudfront_distribution.frontend.id
-      ORIGIN_ID = var.frontend_origin_id
+      CLOUDFRONT_ORIGIN_ID = var.frontend_origin_id
+      CLOUDFRONT_ORIGIN_HEADER_NAME = "x-origin-verify"
     }
   }
 }
@@ -443,8 +450,8 @@ resource "aws_lambda_permission" "secretsmanager_invoke" {
 }
 
 resource "aws_secretsmanager_secret" "verified_origin" {
-  name = "verified-origin"
-  description = "Verify the origin of API requests. Automatically generated and rotated by Terraform."
+  name = "verified-origin4"
+  description = "Verify the origin of API requests"
 }
 
 resource "aws_secretsmanager_secret_rotation" "verified_origin" {

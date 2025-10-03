@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"slices"
 
 	"github.com/aws/aws-lambda-go/events"
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/cloudfront"
 	"github.com/aws/aws-sdk-go-v2/service/cloudfront/types"
@@ -22,13 +22,6 @@ type SecretRotationContext struct {
 	passwordInput secretsmanager.GetRandomPasswordInput
 }
 
-var (
-	AWS_CURRENT     string = "AWSCURRENT"
-	AWS_PENDING     string = "AWSPENDING"
-	TRUE            bool   = true
-	PASSWORD_LENGTH int64  = 32
-)
-
 func NewSecretRotationContext() (*SecretRotationContext, error) {
 	cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion("eu-central-1"))
 	if err != nil {
@@ -40,16 +33,36 @@ func NewSecretRotationContext() (*SecretRotationContext, error) {
 		cloudFront:     cloudfront.NewFromConfig(cfg),
 		passwordInput: secretsmanager.GetRandomPasswordInput{
 			// TODO: read from os env
-			ExcludePunctuation: &TRUE,
-			PasswordLength:     &PASSWORD_LENGTH,
+			ExcludePunctuation: aws.Bool(true),
+			PasswordLength:     aws.Int64(32),
 		},
 	}, nil
+}
+
+func getOrigin(origins []types.Origin, originId string) *types.Origin {
+	for _, origin := range origins {
+		if *origin.Id == originId {
+			return &origin
+		}
+	}
+
+	return nil
+}
+
+func getOriginVerifyHeader(headers []types.OriginCustomHeader, headerName string) *types.OriginCustomHeader {
+	for _, header := range headers {
+		if *header.HeaderName == headerName {
+			return &header
+		}
+	}
+
+	return nil
 }
 
 func (sr SecretRotationContext) createSecret(ctx context.Context, event events.SecretsManagerSecretRotationEvent) (bool, error) {
 	_, err := sr.secretsManager.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
 		SecretId:     &event.SecretID,
-		VersionStage: &AWS_CURRENT,
+		VersionStage: aws.String("AWSCURRENT"),
 	})
 	if err != nil {
 		return true, nil
@@ -58,7 +71,7 @@ func (sr SecretRotationContext) createSecret(ctx context.Context, event events.S
 	_, err = sr.secretsManager.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
 		SecretId:     &event.SecretID,
 		VersionId:    &event.ClientRequestToken,
-		VersionStage: &AWS_PENDING,
+		VersionStage: aws.String("AWSPENDING"),
 	})
 	if err == nil {
 		return true, nil
@@ -72,8 +85,9 @@ func (sr SecretRotationContext) createSecret(ctx context.Context, event events.S
 	_, err = sr.secretsManager.PutSecretValue(ctx, &secretsmanager.PutSecretValueInput{
 		SecretId:           &event.SecretID,
 		ClientRequestToken: &event.ClientRequestToken,
+		RotationToken:      &event.RotationToken,
 		SecretString:       passwordOutput.RandomPassword,
-		VersionStages:      []string{AWS_PENDING},
+		VersionStages:      []string{"AWSPENDING"},
 	})
 	if err != nil {
 		return false, fmt.Errorf("failed to put secret value: %w", err)
@@ -83,16 +97,37 @@ func (sr SecretRotationContext) createSecret(ctx context.Context, event events.S
 }
 
 func (sr SecretRotationContext) setSecret(ctx context.Context, event events.SecretsManagerSecretRotationEvent) (bool, error) {
-	// secretValue, err := sr.secretsManager.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
-	// 	SecretId:     &event.SecretID,
-	// 	VersionStage: &AWS_CURRENT,
-	// })
-	// if err != nil {
-	// 	return false, fmt.Errorf("failed to get current secret: %w", err)
-	// }
+	distributionId, found := os.LookupEnv("CLOUDFRONT_DISTRIBUTION_ID")
+	if !found {
+		return false, errors.New("failed to retrieve CLOUDFRONT_DISTRIBUTION_ID environment variable")
+	}
 
-	distributionId := os.Getenv("CLOUDFRONT_DISTRIBUTION_ID")
-	originId := os.Getenv("ORIGIN_ID")
+	originId, found := os.LookupEnv("CLOUDFRONT_ORIGIN_ID")
+	if !found {
+		return false, errors.New("failed to retrieve CLOUDFRONT_ORIGIN_ID environment variable")
+	}
+
+	headerName, found := os.LookupEnv("CLOUDFRONT_ORIGIN_HEADER_NAME")
+	if !found {
+		return false, errors.New("failed to retrieve CLOUDFRONT_ORIGIN_HEADER_NAME environment variable")
+	}
+
+	current, err := sr.secretsManager.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
+		SecretId:     &event.SecretID,
+		VersionStage: aws.String("AWSCURRENT"),
+	})
+	if err != nil {
+		return false, fmt.Errorf("failed to get current secret, abandoning rotation: %w", err)
+	}
+
+	pending, err := sr.secretsManager.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
+		SecretId:     &event.SecretID,
+		VersionId:    &event.ClientRequestToken,
+		VersionStage: aws.String("AWSPENDING"),
+	})
+	if err != nil {
+		return false, fmt.Errorf("failed to get pending secret: %w", err)
+	}
 
 	distribution, err := sr.cloudFront.GetDistributionConfig(ctx, &cloudfront.GetDistributionConfigInput{
 		Id: &distributionId,
@@ -101,33 +136,25 @@ func (sr SecretRotationContext) setSecret(ctx context.Context, event events.Secr
 		return false, fmt.Errorf("failed to get distribution config: %w", err)
 	}
 
-	frontendOriginIdx := slices.IndexFunc(distribution.DistributionConfig.Origins.Items, func(origin types.Origin) bool {
-		return *origin.Id == originId
-	})
-
-	if frontendOriginIdx == -1 {
+	frontendOrigin := getOrigin(distribution.DistributionConfig.Origins.Items, originId)
+	if frontendOrigin == nil {
 		return false, errors.New("failed to get frontend origin")
 	}
 
-	frontendOrigin := &distribution.DistributionConfig.Origins.Items[frontendOriginIdx]
+	originVerifyHeader := getOriginVerifyHeader(frontendOrigin.CustomHeaders.Items, headerName)
+	if originVerifyHeader == nil {
+		frontendOrigin.CustomHeaders.Items = append(frontendOrigin.CustomHeaders.Items, types.OriginCustomHeader{
+			HeaderName:  &headerName,
+			HeaderValue: pending.SecretString,
+		})
 
-	verifiedOriginHeader := types.OriginCustomHeader{
-		HeaderName:  &event.SecretID,
-		HeaderValue: sr.randomPassword,
-	}
-
-	headerExists := false
-	for i, header := range frontendOrigin.CustomHeaders.Items {
-		if *header.HeaderName == event.SecretID {
-			frontendOrigin.CustomHeaders.Items[i] = verifiedOriginHeader
-			headerExists = true
-			break
-		}
-	}
-
-	if !headerExists {
-		frontendOrigin.CustomHeaders.Items = append(frontendOrigin.CustomHeaders.Items, verifiedOriginHeader)
 		*frontendOrigin.CustomHeaders.Quantity++
+	} else {
+		if originVerifyHeader.HeaderValue == nil || *originVerifyHeader.HeaderValue != *current.SecretString {
+			return false, errors.New("current secret doesn't match cloudfront configuration, abandoning rotation")
+		}
+
+		originVerifyHeader.HeaderValue = pending.SecretString
 	}
 
 	_, err = sr.cloudFront.UpdateDistribution(ctx, &cloudfront.UpdateDistributionInput{
@@ -138,15 +165,90 @@ func (sr SecretRotationContext) setSecret(ctx context.Context, event events.Secr
 	if err != nil {
 		return false, fmt.Errorf("failed to update distribution: %w", err)
 	}
+
 	return true, nil
 }
 
 func (sr SecretRotationContext) testSecret(ctx context.Context, event events.SecretsManagerSecretRotationEvent) (bool, error) {
+	distributionId, found := os.LookupEnv("CLOUDFRONT_DISTRIBUTION_ID")
+	if !found {
+		return false, errors.New("failed to retrieve CLOUDFRONT_DISTRIBUTION_ID environment variable")
+	}
+
+	originId, found := os.LookupEnv("CLOUDFRONT_ORIGIN_ID")
+	if !found {
+		return false, errors.New("failed to retrieve CLOUDFRONT_ORIGIN_ID environment variable")
+	}
+
+	headerName, found := os.LookupEnv("CLOUDFRONT_ORIGIN_HEADER_NAME")
+	if !found {
+		return false, errors.New("failed to retrieve CLOUDFRONT_ORIGIN_HEADER_NAME environment variable")
+	}
+
+	pending, err := sr.secretsManager.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
+		SecretId:     &event.SecretID,
+		VersionId:    &event.ClientRequestToken,
+		VersionStage: aws.String("AWSPENDING"),
+	})
+	if err != nil {
+		return false, fmt.Errorf("failed to get pending secret: %w", err)
+	}
+
+	distribution, err := sr.cloudFront.GetDistributionConfig(ctx, &cloudfront.GetDistributionConfigInput{
+		Id: &distributionId,
+	})
+	if err != nil {
+		return false, fmt.Errorf("failed to get distribution config: %w", err)
+	}
+
+	frontendOrigin := getOrigin(distribution.DistributionConfig.Origins.Items, originId)
+	if frontendOrigin == nil {
+		return false, errors.New("failed to get frontend origin")
+	}
+
+	originVerifyHeader := getOriginVerifyHeader(frontendOrigin.CustomHeaders.Items, headerName)
+	if originVerifyHeader == nil {
+		return false, errors.New("failed to get verified origin header")
+	}
+
+	if originVerifyHeader.HeaderValue != pending.SecretString {
+		return false, errors.New("pending secret doesn't match cloudfront configuration, abandoning rotation")
+	}
 
 	return true, nil
 }
 
 func (sr SecretRotationContext) finishSecret(ctx context.Context, event events.SecretsManagerSecretRotationEvent) (bool, error) {
+	secretDesc, err := sr.secretsManager.DescribeSecret(ctx, &secretsmanager.DescribeSecretInput{
+		SecretId: &event.SecretID,
+	})
+	if err != nil {
+		return false, fmt.Errorf("failed to describe secret: %w", err)
+	}
+
+	var currentVersionId string
+	for versionId, stages := range secretDesc.VersionIdsToStages {
+		for _, stage := range stages {
+			if stage == "AWSCURRENT" {
+				if versionId == event.ClientRequestToken {
+					return true, nil
+				}
+
+				currentVersionId = versionId
+				break
+			}
+		}
+	}
+
+	_, err = sr.secretsManager.UpdateSecretVersionStage(ctx, &secretsmanager.UpdateSecretVersionStageInput{
+		SecretId:            &event.SecretID,
+		VersionStage:        aws.String("AWSCURRENT"),
+		MoveToVersionId:     &event.ClientRequestToken,
+		RemoveFromVersionId: &currentVersionId,
+	})
+	if err != nil {
+		return false, fmt.Errorf("failed to update secret version stage: %w", err)
+	}
 
 	return true, nil
 }
@@ -156,9 +258,11 @@ func (sr SecretRotationContext) RotateSecret(ctx context.Context, event events.S
 	case "createSecret":
 		return sr.createSecret(ctx, event)
 	case "setSecret":
-		return sr.setSecret(ctx, event)
+		// return sr.setSecret(ctx, event)
+		return true, nil
 	case "testSecret":
-		return sr.testSecret(ctx, event)
+		// return sr.testSecret(ctx, event)
+		return true, nil
 	case "finishSecret":
 		return sr.finishSecret(ctx, event)
 	default:
