@@ -83,17 +83,21 @@ func setSecret(sr *secret.SecretRotator) func(context.Context, events.SecretsMan
 
 		originIndex := getOriginIndex(distribution.DistributionConfig.Origins.Items, originId)
 		if originIndex == -1 {
-			return false, errors.New("failed to get frontend origin")
+			return false, fmt.Errorf("failed to get '%s' origin", originId)
 		}
 
-		headerIndex := getOriginVerifyHeaderIndex(distribution.DistributionConfig.Origins.Items[originIndex].CustomHeaders.Items, headerName)
-		if headerIndex == -1 ||
-			distribution.DistributionConfig.Origins.Items[originIndex].CustomHeaders.Items[headerIndex].HeaderValue == nil ||
-			*distribution.DistributionConfig.Origins.Items[originIndex].CustomHeaders.Items[headerIndex].HeaderValue != *current.SecretString {
+		origin := &distribution.DistributionConfig.Origins.Items[originIndex]
+		headerIndex := getOriginVerifyHeaderIndex(origin.CustomHeaders.Items, headerName)
+		if headerIndex == -1 {
+			return false, fmt.Errorf("failed to get '%s' origin header", headerName)
+		}
+
+		header := &origin.CustomHeaders.Items[headerIndex]
+		if header.HeaderValue == nil || *header.HeaderValue != *current.SecretString {
 			return false, errors.New("current secret doesn't match cloudfront configuration")
 		}
 
-		distribution.DistributionConfig.Origins.Items[originIndex].CustomHeaders.Items[headerIndex].HeaderValue = pending.SecretString
+		header.HeaderValue = pending.SecretString
 
 		_, err = cloudFront.UpdateDistribution(ctx, &cloudfront.UpdateDistributionInput{
 			Id:                 &distributionId,
@@ -148,16 +152,17 @@ func testSecret(sr *secret.SecretRotator) func(context.Context, events.SecretsMa
 
 		originIndex := getOriginIndex(distribution.DistributionConfig.Origins.Items, originId)
 		if originIndex == -1 {
-			return false, errors.New("failed to get frontend origin")
+			return false, fmt.Errorf("failed to get '%s' origin", originId)
 		}
 
-		headerIndex := getOriginVerifyHeaderIndex(distribution.DistributionConfig.Origins.Items[originIndex].CustomHeaders.Items, headerName)
+		origin := &distribution.DistributionConfig.Origins.Items[originIndex]
+		headerIndex := getOriginVerifyHeaderIndex(origin.CustomHeaders.Items, headerName)
 		if headerIndex == -1 {
-			return false, errors.New("failed to get verified origin header")
+			return false, fmt.Errorf("failed to get '%s' origin header", headerName)
 		}
 
-		if distribution.DistributionConfig.Origins.Items[originIndex].CustomHeaders.Items[headerIndex].HeaderValue == nil ||
-			*distribution.DistributionConfig.Origins.Items[originIndex].CustomHeaders.Items[headerIndex].HeaderValue != *pending.SecretString {
+		header := &origin.CustomHeaders.Items[headerIndex]
+		if header.HeaderValue == nil || *header.HeaderValue != *pending.SecretString {
 			return false, errors.New("pending secret doesn't match cloudfront configuration")
 		}
 

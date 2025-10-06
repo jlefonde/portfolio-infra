@@ -20,7 +20,7 @@ type SecretRotator struct {
 }
 
 func NewSecretRotator() (*SecretRotator, error) {
-	awsConfig, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion("eu-central-1"))
+	awsConfig, err := config.LoadDefaultConfig(context.TODO())
 	if err != nil {
 		return nil, fmt.Errorf("failed to load default config: %w", err)
 	}
