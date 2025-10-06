@@ -19,7 +19,7 @@ type SecretRotator struct {
 	randomPasswordInput *secretsmanager.GetRandomPasswordInput
 }
 
-func NewSecretRotator(setSecret, testSecret func(ctx context.Context, event events.SecretsManagerSecretRotationEvent) (bool, error)) (*SecretRotator, error) {
+func NewSecretRotator() (*SecretRotator, error) {
 	awsConfig, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion("eu-central-1"))
 	if err != nil {
 		return nil, fmt.Errorf("failed to load default config: %w", err)
@@ -34,12 +34,26 @@ func NewSecretRotator(setSecret, testSecret func(ctx context.Context, event even
 		awsConfig:           awsConfig,
 		secretsManager:      secretsmanager.NewFromConfig(awsConfig),
 		randomPasswordInput: randomPasswordInput,
-		setSecret:           setSecret,
-		testSecret:          testSecret,
 	}, nil
 }
 
-func (sr SecretRotator) createSecret(ctx context.Context, event events.SecretsManagerSecretRotationEvent) (bool, error) {
+func (sr *SecretRotator) SetSetSecretFunc(fn func(ctx context.Context, event events.SecretsManagerSecretRotationEvent) (bool, error)) {
+	sr.setSecret = fn
+}
+
+func (sr *SecretRotator) SetTestSecretFunc(fn func(ctx context.Context, event events.SecretsManagerSecretRotationEvent) (bool, error)) {
+	sr.testSecret = fn
+}
+
+func (sr *SecretRotator) GetSecretsManager() *secretsmanager.Client {
+	return sr.secretsManager
+}
+
+func (sr *SecretRotator) GetAWSConfig() aws.Config {
+	return sr.awsConfig
+}
+
+func (sr *SecretRotator) createSecret(ctx context.Context, event events.SecretsManagerSecretRotationEvent) (bool, error) {
 	_, err := sr.secretsManager.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
 		SecretId:     &event.SecretID,
 		VersionStage: aws.String("AWSCURRENT"),
@@ -76,7 +90,7 @@ func (sr SecretRotator) createSecret(ctx context.Context, event events.SecretsMa
 	return true, nil
 }
 
-func (sr SecretRotator) finishSecret(ctx context.Context, event events.SecretsManagerSecretRotationEvent) (bool, error) {
+func (sr *SecretRotator) finishSecret(ctx context.Context, event events.SecretsManagerSecretRotationEvent) (bool, error) {
 	secretDesc, err := sr.secretsManager.DescribeSecret(ctx, &secretsmanager.DescribeSecretInput{
 		SecretId: &event.SecretID,
 	})
@@ -111,13 +125,21 @@ func (sr SecretRotator) finishSecret(ctx context.Context, event events.SecretsMa
 	return true, nil
 }
 
-func (sr SecretRotator) RotateSecret(ctx context.Context, event events.SecretsManagerSecretRotationEvent) (bool, error) {
+func (sr *SecretRotator) RotateSecret(ctx context.Context, event events.SecretsManagerSecretRotationEvent) (bool, error) {
 	switch event.Step {
 	case "createSecret":
 		return sr.createSecret(ctx, event)
 	case "setSecret":
+		if sr.setSecret == nil {
+			return true, nil
+		}
+
 		return sr.setSecret(ctx, event)
 	case "testSecret":
+		if sr.testSecret == nil {
+			return true, nil
+		}
+
 		return sr.testSecret(ctx, event)
 	case "finishSecret":
 		return sr.finishSecret(ctx, event)

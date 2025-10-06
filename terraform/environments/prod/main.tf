@@ -46,11 +46,20 @@ resource "aws_cloudfront_origin_access_control" "default" {
   signing_protocol                  = "sigv4"
 }
 
+data "aws_secretsmanager_random_password" "verified_origin" {
+  password_length = 32
+  exclude_punctuation = true
+}
+
 resource "aws_cloudfront_distribution" "frontend" {
   origin {
     origin_id                = var.frontend_origin_id
     domain_name              = aws_s3_bucket.frontend.bucket_domain_name
     origin_access_control_id = aws_cloudfront_origin_access_control.default.id
+    custom_header {
+      name = "x-origin-verify"
+      value = data.aws_secretsmanager_random_password.verified_origin.random_password
+    }
   }
 
   restrictions {
@@ -88,6 +97,12 @@ resource "aws_cloudfront_distribution" "frontend" {
   aliases             = [var.domain_name]
   comment             = "CloudFront distribution to distribute frontend"
   default_root_object = "index.html"
+
+  lifecycle {
+    ignore_changes = [
+      origin 
+    ]
+  }
 }
 
 data "aws_route53_zone" "primary" {
@@ -452,8 +467,17 @@ resource "aws_lambda_permission" "secretsmanager_invoke" {
 }
 
 resource "aws_secretsmanager_secret" "verified_origin" {
-  name = "verified-origin-tmp"
+  name = "cloudfront/verified-origin-2"
   description = "Verify the origin of API requests"
+}
+
+resource "aws_secretsmanager_secret_version" "verified_origin" {
+  secret_id = aws_secretsmanager_secret.verified_origin.id
+  secret_string = data.aws_secretsmanager_random_password.verified_origin.random_password
+
+  lifecycle {
+    ignore_changes = [secret_string]
+  }
 }
 
 resource "aws_secretsmanager_secret_rotation" "verified_origin" {
