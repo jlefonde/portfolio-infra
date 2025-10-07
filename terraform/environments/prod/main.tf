@@ -1,5 +1,14 @@
+locals {
+  # See: https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/using-managed-cache-policies.html
+  cloudfront_cache_policies = {
+    caching_disabled  = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"
+    caching_optimized = "658327ea-f89d-4fab-a63d-7e88639e58f6"
+  }
+}
+
 resource "aws_s3_bucket" "frontend" {
   bucket = "${var.domain_name}-frontend"
+  force_destroy = true
 }
 
 data "aws_iam_policy_document" "cloudfront_s3_access" {
@@ -18,7 +27,7 @@ data "aws_iam_policy_document" "cloudfront_s3_access" {
     condition {
       test     = "ArnLike"
       variable = "AWS:SourceArn"
-      values   = [aws_cloudfront_distribution.frontend.arn]
+      values   = [aws_cloudfront_distribution.main.arn]
     }
   }
 }
@@ -51,14 +60,31 @@ data "aws_secretsmanager_random_password" "verified_origin" {
   exclude_punctuation = true
 }
 
-resource "aws_cloudfront_distribution" "frontend" {
+data "aws_cloudfront_origin_request_policy" "all_viewer_except_host" {
+  name = "Managed-AllViewerExceptHostHeader"
+}
+
+resource "aws_cloudfront_distribution" "main" {
   origin {
     origin_id                = var.frontend_origin_id
     domain_name              = aws_s3_bucket.frontend.bucket_domain_name
     origin_access_control_id = aws_cloudfront_origin_access_control.default.id
+  }
+
+  origin {
+    origin_id   = var.backend_origin_id
+    domain_name = replace(aws_apigatewayv2_api.primary.api_endpoint, "https://", "")
+
+    custom_origin_config {
+      http_port              = 80
+      https_port             = 443
+      origin_protocol_policy = "https-only"
+      origin_ssl_protocols   = ["TLSv1.2"]
+    }
+
     custom_header {
       name  = "x-origin-verify"
-      value = data.aws_secretsmanager_random_password.verified_origin.random_password
+      value = aws_secretsmanager_secret_version.verified_origin.secret_string
     }
   }
 
@@ -70,21 +96,23 @@ resource "aws_cloudfront_distribution" "frontend" {
   }
 
   default_cache_behavior {
-    allowed_methods  = ["GET", "HEAD"]
-    cached_methods   = ["GET", "HEAD"]
+    allowed_methods  = ["HEAD", "GET"]
+    cached_methods   = ["HEAD", "GET"]
     target_origin_id = var.frontend_origin_id
 
     viewer_protocol_policy = "redirect-to-https"
-    min_ttl                = var.cloudfront_min_ttl
-    default_ttl            = var.cloudfront_default_ttl
-    max_ttl                = var.cloudfront_max_ttl
+    cache_policy_id = local.cloudfront_cache_policies.caching_optimized
+  }
 
-    forwarded_values {
-      query_string = false
-      cookies {
-        forward = "none"
-      }
-    }
+  ordered_cache_behavior {
+    path_pattern     = "/api/*"
+    allowed_methods  = ["HEAD", "GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+    cached_methods   = ["HEAD", "GET"]
+    target_origin_id = var.backend_origin_id
+
+    viewer_protocol_policy = "redirect-to-https"
+    cache_policy_id = local.cloudfront_cache_policies.caching_disabled
+    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer_except_host.id
   }
 
   viewer_certificate {
@@ -97,12 +125,6 @@ resource "aws_cloudfront_distribution" "frontend" {
   aliases             = [var.domain_name]
   comment             = "CloudFront distribution to distribute frontend"
   default_root_object = "index.html"
-
-  lifecycle {
-    ignore_changes = [
-      origin
-    ]
-  }
 }
 
 data "aws_route53_zone" "primary" {
@@ -114,8 +136,8 @@ resource "aws_route53_record" "cloudfront_ipv4" {
   name    = var.domain_name
   type    = "A"
   alias {
-    zone_id                = aws_cloudfront_distribution.frontend.hosted_zone_id
-    name                   = aws_cloudfront_distribution.frontend.domain_name
+    zone_id                = aws_cloudfront_distribution.main.hosted_zone_id
+    name                   = aws_cloudfront_distribution.main.domain_name
     evaluate_target_health = false
   }
 }
@@ -125,8 +147,8 @@ resource "aws_route53_record" "cloudfront_ipv6" {
   name    = var.domain_name
   type    = "AAAA"
   alias {
-    zone_id                = aws_cloudfront_distribution.frontend.hosted_zone_id
-    name                   = aws_cloudfront_distribution.frontend.domain_name
+    zone_id                = aws_cloudfront_distribution.main.hosted_zone_id
+    name                   = aws_cloudfront_distribution.main.domain_name
     evaluate_target_health = false
   }
 }
@@ -169,6 +191,7 @@ resource "aws_dynamodb_table" "tables" {
 
 resource "aws_s3_bucket" "backend" {
   bucket = "${var.domain_name}-backend"
+  force_destroy = true
 }
 
 data "archive_file" "bootstrap_lambda" {
@@ -198,7 +221,7 @@ data "aws_iam_policy_document" "lambda_assume_role" {
   }
 }
 
-data "aws_iam_policy_document" "lambda_dynamodb_access" {
+data "aws_iam_policy_document" "lambda_api" {
   statement {
     sid    = "AllowLambdaServiceAccessDynamoDb"
     effect = "Allow"
@@ -215,14 +238,7 @@ data "aws_iam_policy_document" "lambda_dynamodb_access" {
 
     resources = [aws_dynamodb_table.tables["visitor_count"].arn]
   }
-}
 
-resource "aws_cloudwatch_log_group" "lambda_visitor_count" {
-  name              = "/aws/lambda/visitor-count"
-  retention_in_days = var.lambda_log_retention
-}
-
-data "aws_iam_policy_document" "lambda_logs" {
   statement {
     sid    = "AllowLambdaServiceWriteLogs"
     effect = "Allow"
@@ -236,11 +252,9 @@ data "aws_iam_policy_document" "lambda_logs" {
   }
 }
 
-data "aws_iam_policy_document" "lambda_api" {
-  source_policy_documents = [
-    data.aws_iam_policy_document.lambda_dynamodb_access.json,
-    data.aws_iam_policy_document.lambda_logs.json,
-  ]
+resource "aws_cloudwatch_log_group" "lambda_visitor_count" {
+  name              = "/aws/lambda/visitor-count"
+  retention_in_days = var.lambda_log_retention
 }
 
 resource "aws_iam_policy" "lambda_api" {
@@ -293,30 +307,6 @@ resource "aws_apigatewayv2_stage" "default" {
   auto_deploy = true
 }
 
-resource "aws_apigatewayv2_domain_name" "primary" {
-  domain_name = "api.${var.domain_name}"
-
-  domain_name_configuration {
-    certificate_arn = data.aws_acm_certificate.backend.arn
-    endpoint_type   = "REGIONAL"
-    security_policy = "TLS_1_2"
-  }
-}
-
-resource "aws_apigatewayv2_api_mapping" "name" {
-  api_id      = aws_apigatewayv2_api.primary.id
-  domain_name = aws_apigatewayv2_domain_name.primary.domain_name
-  stage       = aws_apigatewayv2_stage.default.id
-}
-
-resource "aws_route53_record" "api" {
-  zone_id = data.aws_route53_zone.primary.zone_id
-  name    = aws_apigatewayv2_domain_name.primary.domain_name
-  type    = "CNAME"
-  ttl     = 300
-  records = [aws_apigatewayv2_domain_name.primary.domain_name_configuration[0].target_domain_name]
-}
-
 resource "aws_lambda_permission" "apigateway_invoke" {
   statement_id  = "AllowAPIGatewayInvoke"
   function_name = aws_lambda_function.api.function_name
@@ -335,14 +325,14 @@ resource "aws_apigatewayv2_integration" "visitor_count" {
 
 resource "aws_apigatewayv2_route" "get_visitor_count" {
   api_id    = aws_apigatewayv2_api.primary.id
-  route_key = "GET /visitor-count/{id}"
+  route_key = "GET /api/visitor-count/{id}"
 
   target = "integrations/${aws_apigatewayv2_integration.visitor_count.id}"
 }
 
 resource "aws_apigatewayv2_route" "post_visitor_count" {
   api_id    = aws_apigatewayv2_api.primary.id
-  route_key = "POST /visitor-count/{id}"
+  route_key = "POST /api/visitor-count/{id}"
 
   target = "integrations/${aws_apigatewayv2_integration.visitor_count.id}"
 }
@@ -363,7 +353,7 @@ data "aws_iam_policy_document" "get_random_password" {
   }
 }
 
-data "aws_iam_policy_document" "lambda_update_verified_origin_secret" {
+data "aws_iam_policy_document" "lambda_rotate_verified_origin" {
   statement {
     sid    = "AllowLambdaServiceUpdateSecretsManager"
     effect = "Allow"
@@ -378,9 +368,7 @@ data "aws_iam_policy_document" "lambda_update_verified_origin_secret" {
 
     resources = [aws_secretsmanager_secret.verified_origin.arn]
   }
-}
 
-data "aws_iam_policy_document" "lambda_rotate_verified_origin_logs" {
   statement {
     sid    = "AllowLambdaServiceWriteLogs"
     effect = "Allow"
@@ -392,9 +380,7 @@ data "aws_iam_policy_document" "lambda_rotate_verified_origin_logs" {
 
     resources = ["${aws_cloudwatch_log_group.lambda_rotate_verified_origin.arn}:*"]
   }
-}
 
-data "aws_iam_policy_document" "lambda_cloudfront_access" {
   statement {
     sid    = "AllowLambdaServiceUpdateCloudFront"
     effect = "Allow"
@@ -404,17 +390,8 @@ data "aws_iam_policy_document" "lambda_cloudfront_access" {
       "cloudfront:UpdateDistribution"
     ]
 
-    resources = [aws_cloudfront_distribution.frontend.arn]
+    resources = [aws_cloudfront_distribution.main.arn]
   }
-}
-
-data "aws_iam_policy_document" "lambda_rotate_verified_origin" {
-  source_policy_documents = [
-    data.aws_iam_policy_document.get_random_password.json,
-    data.aws_iam_policy_document.lambda_update_verified_origin_secret.json,
-    data.aws_iam_policy_document.lambda_rotate_verified_origin_logs.json,
-    data.aws_iam_policy_document.lambda_cloudfront_access.json,
-  ]
 }
 
 resource "aws_iam_policy" "lambda_rotate_verified_origin" {
@@ -450,8 +427,8 @@ resource "aws_lambda_function" "rotate_verified_origin" {
 
   environment {
     variables = {
-      CLOUDFRONT_DISTRIBUTION_ID    = aws_cloudfront_distribution.frontend.id
-      CLOUDFRONT_ORIGIN_ID          = var.frontend_origin_id
+      CLOUDFRONT_DISTRIBUTION_ID    = aws_cloudfront_distribution.main.id
+      CLOUDFRONT_ORIGIN_ID          = var.backend_origin_id
       CLOUDFRONT_ORIGIN_HEADER_NAME = "x-origin-verify"
       SECRET_PASSWORD_LENGTH        = 32
       SECRET_EXCLUDE_PUNCTUATION    = true
@@ -467,7 +444,7 @@ resource "aws_lambda_permission" "secretsmanager_invoke" {
 }
 
 resource "aws_secretsmanager_secret" "verified_origin" {
-  name        = "cloudfront/verified-origin-3"
+  name        = "cloudfront/origin-verify"
   description = "Verify the origin of API requests"
 }
 
@@ -497,7 +474,7 @@ data "archive_file" "api_authorizer" {
 
 data "aws_iam_policy_document" "lambda_verified_origin_secret_access" {
   statement {
-    sid = "AllowLamdaAccessVerifiedOriginSecret"
+    sid    = "AllowLamdaAccessVerifiedOriginSecret"
     effect = "Allow"
 
     actions = ["secretsmanager:GetSecretValue"]
@@ -512,7 +489,7 @@ resource "aws_iam_policy" "lambda_api_authorizer" {
 }
 
 resource "aws_iam_role" "lambda_api_authorizer" {
-  name = "lambda-api-authorizer-role"
+  name               = "lambda-api-authorizer-role"
   assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
 }
 
@@ -534,7 +511,7 @@ resource "aws_lambda_function" "api_authorizer" {
   environment {
     variables = {
       CLOUDFRONT_ORIGIN_HEADER_NAME = "x-origin-verify"
-      SECRET_NAME                   = "cloudfront/verified-origin-3"
+      SECRET_NAME                   = aws_secretsmanager_secret.verified_origin.id
     }
   }
 }

@@ -29,7 +29,12 @@ variable "environment" {
 }
 
 variable "frontend_origin_id" {
-  description = "Origin ID for CloudFront distribution"
+  description = "Frontend origin ID for CloudFront distribution"
+  type        = string
+}
+
+variable "backend_origin_id" {
+  description = "Backend origin ID for CloudFront distribution"
   type        = string
 }
 
