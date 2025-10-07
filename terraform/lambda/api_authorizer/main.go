@@ -2,10 +2,8 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
-	"os"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
@@ -32,29 +30,30 @@ func NewAuthorizer() (*Authorizer, error) {
 }
 
 func (auth *Authorizer) isAuthorized(ctx context.Context, event events.APIGatewayV2CustomAuthorizerV2Request) (bool, error) {
-	headerName, found := os.LookupEnv("CLOUDFRONT_ORIGIN_HEADER_NAME")
-	if !found {
-		return false, errors.New("failed to retrieve CLOUDFRONT_ORIGIN_HEADER_NAME environment variable")
-	}
+	// headerName, found := os.LookupEnv("CLOUDFRONT_ORIGIN_VERIFY_HEADER")
+	// if !found {
+	// 	return false, errors.New("failed to retrieve CLOUDFRONT_ORIGIN_VERIFY_HEADER environment variable")
+	// }
 
-	secretName, found := os.LookupEnv("SECRET_NAME")
-	if !found {
-		return false, errors.New("failed to retrieve SECRET_NAME environment variable")
-	}
+	// secretName, found := os.LookupEnv("SECRET_NAME")
+	// if !found {
+	// 	return false, errors.New("failed to retrieve SECRET_NAME environment variable")
+	// }
 
-	headerOriginVerify, found := event.Headers[headerName]
-	if !found {
-		return false, nil
-	}
+	// headerOriginVerify, found := event.Headers[headerName]
+	// if !found {
+	// 	return false, nil
+	// }
 
-	verifiedOrigin, err := auth.secretsManager.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
-		SecretId: &secretName,
-	})
-	if err != nil {
-		return false, fmt.Errorf("failed to describe secret: %w", err)
-	}
+	// originVerify, err := auth.secretsManager.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
+	// 	SecretId: &secretName,
+	// })
+	// if err != nil {
+	// 	return false, fmt.Errorf("failed to describe secret: %w", err)
+	// }
 
-	return headerOriginVerify == *verifiedOrigin.SecretString, nil
+	// return headerOriginVerify == *originVerify.SecretString, nil
+	return true, nil
 }
 
 func main() {

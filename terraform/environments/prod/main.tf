@@ -7,7 +7,7 @@ locals {
 }
 
 resource "aws_s3_bucket" "frontend" {
-  bucket = "${var.domain_name}-frontend"
+  bucket        = "${var.domain_name}-frontend"
   force_destroy = true
 }
 
@@ -55,7 +55,7 @@ resource "aws_cloudfront_origin_access_control" "default" {
   signing_protocol                  = "sigv4"
 }
 
-data "aws_secretsmanager_random_password" "verified_origin" {
+data "aws_secretsmanager_random_password" "origin_verify" {
   password_length     = 32
   exclude_punctuation = true
 }
@@ -83,8 +83,8 @@ resource "aws_cloudfront_distribution" "main" {
     }
 
     custom_header {
-      name  = "x-origin-verify"
-      value = aws_secretsmanager_secret_version.verified_origin.secret_string
+      name  = var.cloudfront_origin_verify_header
+      value = aws_secretsmanager_secret_version.origin_verify.secret_string
     }
   }
 
@@ -101,7 +101,7 @@ resource "aws_cloudfront_distribution" "main" {
     target_origin_id = var.frontend_origin_id
 
     viewer_protocol_policy = "redirect-to-https"
-    cache_policy_id = local.cloudfront_cache_policies.caching_optimized
+    cache_policy_id        = local.cloudfront_cache_policies.caching_optimized
   }
 
   ordered_cache_behavior {
@@ -110,8 +110,8 @@ resource "aws_cloudfront_distribution" "main" {
     cached_methods   = ["HEAD", "GET"]
     target_origin_id = var.backend_origin_id
 
-    viewer_protocol_policy = "redirect-to-https"
-    cache_policy_id = local.cloudfront_cache_policies.caching_disabled
+    viewer_protocol_policy   = "redirect-to-https"
+    cache_policy_id          = local.cloudfront_cache_policies.caching_disabled
     origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer_except_host.id
   }
 
@@ -190,7 +190,7 @@ resource "aws_dynamodb_table" "tables" {
 }
 
 resource "aws_s3_bucket" "backend" {
-  bucket = "${var.domain_name}-backend"
+  bucket        = "${var.domain_name}-backend"
   force_destroy = true
 }
 
@@ -248,7 +248,9 @@ data "aws_iam_policy_document" "lambda_api" {
       "logs:PutLogEvents"
     ]
 
-    resources = ["${aws_cloudwatch_log_group.lambda_visitor_count.arn}:*"]
+    resources = [
+      "${aws_cloudwatch_log_group.lambda_visitor_count.arn}:*"
+    ]
   }
 }
 
@@ -327,6 +329,9 @@ resource "aws_apigatewayv2_route" "get_visitor_count" {
   api_id    = aws_apigatewayv2_api.primary.id
   route_key = "GET /api/visitor-count/{id}"
 
+  authorization_type = "CUSTOM"
+  authorizer_id      = aws_apigatewayv2_authorizer.origin_verify.id
+
   target = "integrations/${aws_apigatewayv2_integration.visitor_count.id}"
 }
 
@@ -334,11 +339,14 @@ resource "aws_apigatewayv2_route" "post_visitor_count" {
   api_id    = aws_apigatewayv2_api.primary.id
   route_key = "POST /api/visitor-count/{id}"
 
+  authorization_type = "CUSTOM"
+  authorizer_id      = aws_apigatewayv2_authorizer.origin_verify.id
+
   target = "integrations/${aws_apigatewayv2_integration.visitor_count.id}"
 }
 
-resource "aws_cloudwatch_log_group" "lambda_rotate_verified_origin" {
-  name              = "/aws/lambda/rotate-verified-origin"
+resource "aws_cloudwatch_log_group" "lambda_rotate_origin_verify" {
+  name              = "/aws/lambda/rotate-origin-verify"
   retention_in_days = var.lambda_log_retention
 }
 
@@ -353,7 +361,7 @@ data "aws_iam_policy_document" "get_random_password" {
   }
 }
 
-data "aws_iam_policy_document" "lambda_rotate_verified_origin" {
+data "aws_iam_policy_document" "lambda_rotate_origin_verify" {
   statement {
     sid    = "AllowLambdaServiceUpdateSecretsManager"
     effect = "Allow"
@@ -366,7 +374,7 @@ data "aws_iam_policy_document" "lambda_rotate_verified_origin" {
       "secretsmanager:PutSecretValue"
     ]
 
-    resources = [aws_secretsmanager_secret.verified_origin.arn]
+    resources = [aws_secretsmanager_secret.origin_verify.arn]
   }
 
   statement {
@@ -378,7 +386,7 @@ data "aws_iam_policy_document" "lambda_rotate_verified_origin" {
       "logs:PutLogEvents"
     ]
 
-    resources = ["${aws_cloudwatch_log_group.lambda_rotate_verified_origin.arn}:*"]
+    resources = ["${aws_cloudwatch_log_group.lambda_rotate_origin_verify.arn}:*"]
   }
 
   statement {
@@ -394,131 +402,161 @@ data "aws_iam_policy_document" "lambda_rotate_verified_origin" {
   }
 }
 
-resource "aws_iam_policy" "lambda_rotate_verified_origin" {
-  name   = "lambda-rotate-verified-origin-policy"
-  policy = data.aws_iam_policy_document.lambda_rotate_verified_origin.json
+resource "aws_iam_policy" "lambda_rotate_origin_verify" {
+  name   = "lambda-rotate-origin-verify-policy"
+  policy = data.aws_iam_policy_document.lambda_rotate_origin_verify.json
 }
 
-resource "aws_iam_role" "lambda_rotate_verified_origin" {
-  name               = "lamdba-rotate-verified-origin-role"
+resource "aws_iam_role" "lambda_rotate_origin_verify" {
+  name               = "lamdba-rotate-origin-verify-role"
   assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
 }
 
-resource "aws_iam_role_policy_attachment" "lambda_rotate_verified_origin" {
-  role       = aws_iam_role.lambda_rotate_verified_origin.name
-  policy_arn = aws_iam_policy.lambda_rotate_verified_origin.arn
+resource "aws_iam_role_policy_attachment" "lambda_rotate_origin_verify" {
+  role       = aws_iam_role.lambda_rotate_origin_verify.name
+  policy_arn = aws_iam_policy.lambda_rotate_origin_verify.arn
 }
 
-data "archive_file" "rotate_verified_origin" {
+data "archive_file" "rotate_origin_verify" {
   type        = "zip"
-  source_file = "${path.module}/../../lambda/rotate_secret/bin/rotate_verified_origin/bootstrap"
-  output_path = "${path.module}/../../lambda/rotate_secret/rotate_verified_origin.zip"
+  source_file = "${path.module}/../../lambda/rotate_secret/bin/rotate_origin_verify/bootstrap"
+  output_path = "${path.module}/../../lambda/rotate_secret/rotate_origin_verify.zip"
 }
 
-resource "aws_lambda_function" "rotate_verified_origin" {
-  function_name = "rotate-verified-origin"
-  role          = aws_iam_role.lambda_rotate_verified_origin.arn
+resource "aws_lambda_function" "rotate_origin_verify" {
+  function_name = "rotate-origin-verify"
+  role          = aws_iam_role.lambda_rotate_origin_verify.arn
   publish       = true
 
-  filename         = data.archive_file.rotate_verified_origin.output_path
-  source_code_hash = data.archive_file.rotate_verified_origin.output_base64sha256
+  filename         = data.archive_file.rotate_origin_verify.output_path
+  source_code_hash = data.archive_file.rotate_origin_verify.output_base64sha256
   handler          = "bootstrap"
   runtime          = "provided.al2"
 
   environment {
     variables = {
-      CLOUDFRONT_DISTRIBUTION_ID    = aws_cloudfront_distribution.main.id
-      CLOUDFRONT_ORIGIN_ID          = var.backend_origin_id
-      CLOUDFRONT_ORIGIN_HEADER_NAME = "x-origin-verify"
-      SECRET_PASSWORD_LENGTH        = 32
-      SECRET_EXCLUDE_PUNCTUATION    = true
+      CLOUDFRONT_DISTRIBUTION_ID      = aws_cloudfront_distribution.main.id
+      CLOUDFRONT_ORIGIN_ID            = var.backend_origin_id
+      CLOUDFRONT_ORIGIN_VERIFY_HEADER = var.cloudfront_origin_verify_header
+      SECRET_PASSWORD_LENGTH          = 32
+      SECRET_EXCLUDE_PUNCTUATION      = true
     }
   }
 }
 
 resource "aws_lambda_permission" "secretsmanager_invoke" {
   statement_id  = "AllowSecretsManagerInvoke"
-  function_name = aws_lambda_function.rotate_verified_origin.function_name
+  function_name = aws_lambda_function.rotate_origin_verify.function_name
   action        = "lambda:InvokeFunction"
   principal     = "secretsmanager.amazonaws.com"
 }
 
-resource "aws_secretsmanager_secret" "verified_origin" {
-  name        = "cloudfront/origin-verify"
+resource "aws_secretsmanager_secret" "origin_verify" {
+  name        = "${var.project_name}/cloudfront/origin-verify"
   description = "Verify the origin of API requests"
 }
 
-resource "aws_secretsmanager_secret_version" "verified_origin" {
-  secret_id     = aws_secretsmanager_secret.verified_origin.id
-  secret_string = data.aws_secretsmanager_random_password.verified_origin.random_password
+resource "aws_secretsmanager_secret_version" "origin_verify" {
+  secret_id     = aws_secretsmanager_secret.origin_verify.id
+  secret_string = data.aws_secretsmanager_random_password.origin_verify.random_password
 
   lifecycle {
     ignore_changes = [secret_string]
   }
 }
 
-resource "aws_secretsmanager_secret_rotation" "verified_origin" {
-  secret_id           = aws_secretsmanager_secret.verified_origin.id
-  rotation_lambda_arn = aws_lambda_function.rotate_verified_origin.arn
+resource "aws_secretsmanager_secret_rotation" "origin_verify" {
+  secret_id           = aws_secretsmanager_secret.origin_verify.id
+  rotation_lambda_arn = aws_lambda_function.rotate_origin_verify.arn
 
   rotation_rules {
-    automatically_after_days = var.verified_origin_rotation
+    automatically_after_days = var.origin_verify_rotation
   }
 }
 
-data "archive_file" "api_authorizer" {
+data "archive_file" "origin_verify_authorizer" {
   type        = "zip"
   source_file = "${path.module}/../../lambda/api_authorizer/bootstrap"
-  output_path = "${path.module}/../../lambda/api_authorizer/api_authorizer.zip"
+  output_path = "${path.module}/../../lambda/api_authorizer/origin_verify_authorizer.zip"
 }
 
-data "aws_iam_policy_document" "lambda_verified_origin_secret_access" {
+resource "aws_cloudwatch_log_group" "lambda_origin_verify_authorizer" {
+  name              = "/aws/lambda/origin-verify-authorizer"
+  retention_in_days = var.lambda_log_retention
+}
+
+data "aws_iam_policy_document" "lambda_origin_verify_secret_access" {
   statement {
-    sid    = "AllowLamdaAccessVerifiedOriginSecret"
+    sid    = "AllowLamdaAccessOriginVerifySecret"
     effect = "Allow"
 
     actions = ["secretsmanager:GetSecretValue"]
 
-    resources = [aws_secretsmanager_secret.verified_origin.arn]
+    resources = [aws_secretsmanager_secret.origin_verify.arn]
+  }
+
+  statement {
+    sid    = "AllowLambdaServiceWriteLogs"
+    effect = "Allow"
+
+    actions = [
+      "logs:CreateLogStream",
+      "logs:PutLogEvents"
+    ]
+
+    resources = ["${aws_cloudwatch_log_group.lambda_origin_verify_authorizer.arn}:*"]
   }
 }
 
-resource "aws_iam_policy" "lambda_api_authorizer" {
-  name   = "lambda-api-authorizer"
-  policy = data.aws_iam_policy_document.lambda_verified_origin_secret_access.json
+resource "aws_iam_policy" "lambda_origin_verify_authorizer" {
+  name   = "lambda-origin-verify-authorizer"
+  policy = data.aws_iam_policy_document.lambda_origin_verify_secret_access.json
 }
 
-resource "aws_iam_role" "lambda_api_authorizer" {
-  name               = "lambda-api-authorizer-role"
+resource "aws_iam_role" "lambda_origin_verify_authorizer" {
+  name               = "lambda-origin-verify-authorizer-role"
   assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
 }
 
-resource "aws_iam_role_policy_attachment" "lambda_api_authorizer" {
-  role       = aws_iam_role.lambda_api_authorizer.name
-  policy_arn = aws_iam_policy.lambda_api_authorizer.arn
+resource "aws_iam_role_policy_attachment" "lambda_origin_verify_authorizer" {
+  role       = aws_iam_role.lambda_origin_verify_authorizer.name
+  policy_arn = aws_iam_policy.lambda_origin_verify_authorizer.arn
 }
 
-resource "aws_lambda_function" "api_authorizer" {
-  function_name = "api-authorizer"
-  role          = aws_iam_role.lambda_api_authorizer.arn
+resource "aws_lambda_function" "origin_verify_authorizer" {
+  function_name = "origin-verify-authorizer"
+  role          = aws_iam_role.lambda_origin_verify_authorizer.arn
   publish       = true
 
-  filename         = data.archive_file.api_authorizer.output_path
-  source_code_hash = data.archive_file.api_authorizer.output_base64sha256
+  filename         = data.archive_file.origin_verify_authorizer.output_path
+  source_code_hash = data.archive_file.origin_verify_authorizer.output_base64sha256
   handler          = "bootstrap"
   runtime          = "provided.al2"
 
   environment {
     variables = {
-      CLOUDFRONT_ORIGIN_HEADER_NAME = "x-origin-verify"
-      SECRET_NAME                   = aws_secretsmanager_secret.verified_origin.id
+      CLOUDFRONT_ORIGIN_VERIFY_HEADER = var.cloudfront_origin_verify_header
+      SECRET_NAME                     = aws_secretsmanager_secret.origin_verify.name
     }
   }
 }
 
-resource "aws_lambda_permission" "api_authorizer_invoke" {
+resource "aws_lambda_permission" "origin_verify_authorizer_invoke" {
   statement_id  = "AllowAPIGatewayAuthorizerInvoke"
-  function_name = aws_lambda_function.api_authorizer.function_name
+  function_name = aws_lambda_function.origin_verify_authorizer.function_name
   action        = "lambda:InvokeFunction"
   principal     = "apigateway.amazonaws.com"
+
+  source_arn = "${aws_apigatewayv2_api.primary.execution_arn}/authorizers/${aws_apigatewayv2_authorizer.origin_verify.id}"
+}
+
+resource "aws_apigatewayv2_authorizer" "origin_verify" {
+  api_id                            = aws_apigatewayv2_api.primary.id
+  authorizer_type                   = "REQUEST"
+  authorizer_uri                    = aws_lambda_function.origin_verify_authorizer.invoke_arn
+  identity_sources                  = ["$request.header.${var.cloudfront_origin_verify_header}"]
+  name                              = "origin-verify-authorizer"
+  authorizer_payload_format_version = "2.0"
+  authorizer_result_ttl_in_seconds  = 0 # TODO: remove default is 300
+  enable_simple_responses           = true
 }

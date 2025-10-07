@@ -38,22 +38,12 @@ variable "backend_origin_id" {
   type        = string
 }
 
-variable "cloudfront_min_ttl" {
-  description = "Minimum TTL for CloudFront's default cache behavior"
-  type        = number
+variable "cloudfront_origin_verify_header" {
+  description = "X-Origin-Verify header for CloudFront's API Gateway origin"
+  type        = string
 }
 
-variable "cloudfront_default_ttl" {
-  description = "Default TTL for CloudFront's default cache behavior"
-  type        = number
-}
-
-variable "cloudfront_max_ttl" {
-  description = "Maximum TTL for CloudFront's default cache behavior"
-  type        = number
-}
-
-variable "verified_origin_rotation" {
+variable "origin_verify_rotation" {
   description = "Number of days between automatic scheduled secret rotation"
   type        = number
 }
