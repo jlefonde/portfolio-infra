@@ -4,6 +4,50 @@ locals {
     caching_disabled  = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"
     caching_optimized = "658327ea-f89d-4fab-a63d-7e88639e58f6"
   }
+
+  lambda_functions = {
+    rotate-origin-verify = {
+      handler       = "bootstrap"
+      runtime       = "provided.al2"
+      bootstrap_dir = "${path.module}/../../lambda/rotate_secret/bin/rotate_origin_verify"
+      log_retention = 14
+      publish       = true
+      environment = {
+        CLOUDFRONT_DISTRIBUTION_ID      = aws_cloudfront_distribution.main.id
+        CLOUDFRONT_ORIGIN_ID            = var.backend_origin_id
+        CLOUDFRONT_ORIGIN_VERIFY_HEADER = var.cloudfront_origin_verify_header
+        SECRET_PASSWORD_LENGTH          = 32
+        SECRET_EXCLUDE_PUNCTUATION      = true
+      }
+
+      policy_statements = [
+        {
+          sid       = "AllowGetRandomPassword"
+          actions   = ["secretsmanager:GetRandomPassword"]
+          resources = ["*"]
+        },
+        {
+          sid = "AllowLambdaServiceUpdateSecretsManager"
+          actions = [
+            "secretsmanager:DescribeSecret",
+            "secretsmanager:UpdateSecret",
+            "secretsmanager:UpdateSecretVersionStage",
+            "secretsmanager:GetSecretValue",
+            "secretsmanager:PutSecretValue"
+          ]
+          resources = [aws_secretsmanager_secret.origin_verify.arn]
+        },
+        {
+          sid = "AllowLambdaServiceUpdateCloudFront"
+          actions = [
+            "cloudfront:GetDistributionConfig",
+            "cloudfront:UpdateDistribution"
+          ]
+          resources = [aws_cloudfront_distribution.main.arn]
+        }
+      ]
+    }
+  }
 }
 
 resource "aws_s3_bucket" "frontend" {
@@ -351,55 +395,16 @@ data "aws_iam_policy_document" "lambda_assume_role" {
 }
 
 module "lambda" {
-  source = "../../modules/lambda"
+  source   = "../../modules/lambda"
+  for_each = local.lambda_functions
 
-  lambda_name = "rotate-origin-verify"
-  lambda_config = {
-    handler       = "bootstrap"
-    runtime       = "provided.al2"
-    bootstrap_dir = "${path.module}/../../lambda/rotate_secret/bin/rotate_origin_verify"
-    log_retention = 14
-    publish       = true
-    environment = {
-      CLOUDFRONT_DISTRIBUTION_ID      = aws_cloudfront_distribution.main.id
-      CLOUDFRONT_ORIGIN_ID            = var.backend_origin_id
-      CLOUDFRONT_ORIGIN_VERIFY_HEADER = var.cloudfront_origin_verify_header
-      SECRET_PASSWORD_LENGTH          = 32
-      SECRET_EXCLUDE_PUNCTUATION      = true
-    }
-
-    policy_statements = [
-      {
-        sid       = "AllowGetRandomPassword"
-        actions   = ["secretsmanager:GetRandomPassword"]
-        resources = ["*"]
-      },
-      {
-        sid = "AllowLambdaServiceUpdateSecretsManager"
-        actions = [
-          "secretsmanager:DescribeSecret",
-          "secretsmanager:UpdateSecret",
-          "secretsmanager:UpdateSecretVersionStage",
-          "secretsmanager:GetSecretValue",
-          "secretsmanager:PutSecretValue"
-        ]
-        resources = [aws_secretsmanager_secret.origin_verify.arn]
-      },
-      {
-        sid    = "AllowLambdaServiceUpdateCloudFront"
-        actions = [
-          "cloudfront:GetDistributionConfig",
-          "cloudfront:UpdateDistribution"
-        ]
-        resources = [aws_cloudfront_distribution.main.arn]
-      }
-    ]
-  }
+  lambda_name   = each.key
+  lambda_config = each.value
 }
 
 resource "aws_lambda_permission" "secretsmanager_invoke" {
   statement_id  = "AllowSecretsManagerInvoke"
-  function_name = module.lambda.lambda_function_name
+  function_name = module.lambda["rotate-origin-verify"].lambda_function_name
   action        = "lambda:InvokeFunction"
   principal     = "secretsmanager.amazonaws.com"
 }
@@ -420,7 +425,7 @@ resource "aws_secretsmanager_secret_version" "origin_verify" {
 
 resource "aws_secretsmanager_secret_rotation" "origin_verify" {
   secret_id           = aws_secretsmanager_secret.origin_verify.id
-  rotation_lambda_arn = module.lambda.lambda_function_arn
+  rotation_lambda_arn = module.lambda["rotate-origin-verify"].lambda_function_arn
 
   rotation_rules {
     automatically_after_days = var.origin_verify_rotation
