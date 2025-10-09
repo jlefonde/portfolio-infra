@@ -125,6 +125,10 @@ resource "aws_cloudfront_distribution" "main" {
   aliases             = [var.domain_name]
   comment             = "CloudFront distribution to distribute frontend"
   default_root_object = "index.html"
+
+  lifecycle {
+    ignore_changes = [origin]
+  }
 }
 
 data "aws_route53_zone" "primary" {
@@ -350,7 +354,7 @@ resource "aws_cloudwatch_log_group" "lambda_rotate_origin_verify" {
   retention_in_days = var.lambda_log_retention
 }
 
-data "aws_iam_policy_document" "get_random_password" {
+data "aws_iam_policy_document" "lambda_rotate_origin_verify" {
   statement {
     sid    = "AllowGetRandomPassword"
     effect = "Allow"
@@ -359,9 +363,7 @@ data "aws_iam_policy_document" "get_random_password" {
 
     resources = ["*"]
   }
-}
 
-data "aws_iam_policy_document" "lambda_rotate_origin_verify" {
   statement {
     sid    = "AllowLambdaServiceUpdateSecretsManager"
     effect = "Allow"
@@ -557,6 +559,5 @@ resource "aws_apigatewayv2_authorizer" "origin_verify" {
   identity_sources                  = ["$request.header.${var.cloudfront_origin_verify_header}"]
   name                              = "origin-verify-authorizer"
   authorizer_payload_format_version = "2.0"
-  authorizer_result_ttl_in_seconds  = 0 # TODO: remove default is 300
   enable_simple_responses           = true
 }

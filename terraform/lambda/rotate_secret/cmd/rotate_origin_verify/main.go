@@ -52,9 +52,11 @@ func setSecret(sr *secret.SecretRotator) func(context.Context, events.SecretsMan
 		if !found {
 			return false, errors.New("failed to retrieve CLOUDFRONT_ORIGIN_VERIFY_HEADER environment variable")
 		}
+		log.Printf("Using distribution: %s, origin: %s, header: %s", distributionId, originId, headerName)
 
 		secretsManager := sr.GetSecretsManager()
 
+		log.Printf("Retrieving AWSCURRENT secret version")
 		current, err := secretsManager.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
 			SecretId:     &event.SecretID,
 			VersionStage: aws.String("AWSCURRENT"),
@@ -63,6 +65,7 @@ func setSecret(sr *secret.SecretRotator) func(context.Context, events.SecretsMan
 			return false, fmt.Errorf("failed to get current secret: %w", err)
 		}
 
+		log.Printf("Retrieving AWSPENDING secret version")
 		pending, err := secretsManager.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
 			SecretId:     &event.SecretID,
 			VersionId:    &event.ClientRequestToken,
@@ -74,6 +77,7 @@ func setSecret(sr *secret.SecretRotator) func(context.Context, events.SecretsMan
 
 		cloudFront := cloudfront.NewFromConfig(sr.GetAWSConfig())
 
+		log.Printf("Fetching CloudFront distribution configuration")
 		distribution, err := cloudFront.GetDistributionConfig(ctx, &cloudfront.GetDistributionConfigInput{
 			Id: &distributionId,
 		})
@@ -93,22 +97,24 @@ func setSecret(sr *secret.SecretRotator) func(context.Context, events.SecretsMan
 		}
 
 		header := &origin.CustomHeaders.Items[headerIndex]
+		log.Printf("Verifying current secret matches CloudFront configuration")
 		if header.HeaderValue == nil || *header.HeaderValue != *current.SecretString {
 			return false, errors.New("current secret doesn't match cloudfront configuration")
 		}
 
 		header.HeaderValue = pending.SecretString
 
+		log.Printf("Updating CloudFront distribution")
 		_, err = cloudFront.UpdateDistribution(ctx, &cloudfront.UpdateDistributionInput{
 			Id:                 &distributionId,
 			DistributionConfig: distribution.DistributionConfig,
 			IfMatch:            distribution.ETag,
 		})
-
 		if err != nil {
 			return false, fmt.Errorf("failed to update distribution: %w", err)
 		}
 
+		log.Printf("Successfully updated CloudFront distribution with new secret")
 		return true, nil
 	}
 }
@@ -129,9 +135,11 @@ func testSecret(sr *secret.SecretRotator) func(context.Context, events.SecretsMa
 		if !found {
 			return false, errors.New("failed to retrieve CLOUDFRONT_ORIGIN_VERIFY_HEADER environment variable")
 		}
+		log.Printf("Using distribution: %s, origin: %s, header: %s", distributionId, originId, headerName)
 
 		secretsManager := sr.GetSecretsManager()
 
+		log.Printf("Retrieving AWSPENDING secret version for validation")
 		pending, err := secretsManager.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
 			SecretId:     &event.SecretID,
 			VersionId:    &event.ClientRequestToken,
@@ -143,6 +151,7 @@ func testSecret(sr *secret.SecretRotator) func(context.Context, events.SecretsMa
 
 		cloudFront := cloudfront.NewFromConfig(sr.GetAWSConfig())
 
+		log.Printf("Fetching CloudFront distribution configuration for validation")
 		distribution, err := cloudFront.GetDistributionConfig(ctx, &cloudfront.GetDistributionConfigInput{
 			Id: &distributionId,
 		})
@@ -162,10 +171,12 @@ func testSecret(sr *secret.SecretRotator) func(context.Context, events.SecretsMa
 		}
 
 		header := &origin.CustomHeaders.Items[headerIndex]
+		log.Printf("Validating pending secret matches CloudFront configuration")
 		if header.HeaderValue == nil || *header.HeaderValue != *pending.SecretString {
 			return false, errors.New("pending secret doesn't match cloudfront configuration")
 		}
 
+		log.Printf("Successfully validated pending secret")
 		return true, nil
 	}
 }

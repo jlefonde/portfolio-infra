@@ -6,8 +6,8 @@ domain_name                     = "jorislefondeur.com"
 acm_wildcard                    = "*.jorislefondeur.com"
 frontend_origin_id              = "frontend-origin"
 backend_origin_id               = "backend-origin"
-cloudfront_origin_verify_header = "X-Origin-Verify"
-origin_verify_rotation        = 14
+cloudfront_origin_verify_header = "x-origin-verify"
+origin_verify_rotation          = 14
 lambda_log_retention            = 30
 
 dynamodb_tables = {

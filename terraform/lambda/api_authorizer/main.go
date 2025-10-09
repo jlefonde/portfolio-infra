@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
@@ -29,37 +31,49 @@ func NewAuthorizer() (*Authorizer, error) {
 	}, nil
 }
 
-func (auth *Authorizer) isAuthorized(ctx context.Context, event events.APIGatewayV2CustomAuthorizerV2Request) (bool, error) {
-	// headerName, found := os.LookupEnv("CLOUDFRONT_ORIGIN_VERIFY_HEADER")
-	// if !found {
-	// 	return false, errors.New("failed to retrieve CLOUDFRONT_ORIGIN_VERIFY_HEADER environment variable")
-	// }
+func (auth *Authorizer) isAuthorized(ctx context.Context, event events.APIGatewayV2CustomAuthorizerV2Request) (*events.APIGatewayV2CustomAuthorizerSimpleResponse, error) {
+	log.Println("Authorization request received")
 
-	// secretName, found := os.LookupEnv("SECRET_NAME")
-	// if !found {
-	// 	return false, errors.New("failed to retrieve SECRET_NAME environment variable")
-	// }
+	headerName, found := os.LookupEnv("CLOUDFRONT_ORIGIN_VERIFY_HEADER")
+	if !found {
+		return nil, errors.New("failed to retrieve CLOUDFRONT_ORIGIN_VERIFY_HEADER environment variable")
+	}
+	log.Printf("Using header name: %s", headerName)
 
-	// headerOriginVerify, found := event.Headers[headerName]
-	// if !found {
-	// 	return false, nil
-	// }
+	secretName, found := os.LookupEnv("SECRET_NAME")
+	if !found {
+		return nil, errors.New("failed to retrieve SECRET_NAME environment variable")
+	}
 
-	// originVerify, err := auth.secretsManager.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
-	// 	SecretId: &secretName,
-	// })
-	// if err != nil {
-	// 	return false, fmt.Errorf("failed to describe secret: %w", err)
-	// }
+	log.Printf("Retrieving secret: %s", secretName)
+	originVerify, err := auth.secretsManager.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
+		SecretId: &secretName,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to describe secret: %v", err)
+	}
+	log.Println("Secret retrieved successfully")
 
-	// return headerOriginVerify == *originVerify.SecretString, nil
-	return true, nil
+	isAuthorized := false
+	headerOriginVerify, found := event.Headers[headerName]
+	if !found {
+		log.Printf("Authorization header '%s' not found in request\n", headerName)
+	} else if headerOriginVerify != *originVerify.SecretString {
+		log.Println("Authorization header value does not match secret")
+	} else {
+		isAuthorized = headerOriginVerify == *originVerify.SecretString
+		log.Println("Authorized:", isAuthorized)
+	}
+
+	return &events.APIGatewayV2CustomAuthorizerSimpleResponse{
+		IsAuthorized: isAuthorized,
+	}, nil
 }
 
 func main() {
 	auth, err := NewAuthorizer()
 	if err != nil {
-		log.Fatal("failed to create authorizer: %w", err)
+		log.Fatalf("failed to create authorizer: %v", err)
 	}
 
 	lambda.Start(auth.isAuthorized)
