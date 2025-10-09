@@ -211,20 +211,6 @@ resource "aws_s3_object" "bootstrap_lambda" {
   source_hash = data.archive_file.bootstrap_lambda.output_base64sha256
 }
 
-data "aws_iam_policy_document" "lambda_assume_role" {
-  statement {
-    sid    = "AllowLambdaServiceAssumeRole"
-    effect = "Allow"
-
-    principals {
-      type        = "Service"
-      identifiers = ["lambda.amazonaws.com"]
-    }
-
-    actions = ["sts:AssumeRole"]
-  }
-}
-
 data "aws_iam_policy_document" "lambda_api" {
   statement {
     sid    = "AllowLambdaServiceAccessDynamoDb"
@@ -349,106 +335,71 @@ resource "aws_apigatewayv2_route" "post_visitor_count" {
   target = "integrations/${aws_apigatewayv2_integration.visitor_count.id}"
 }
 
-resource "aws_cloudwatch_log_group" "lambda_rotate_origin_verify" {
-  name              = "/aws/lambda/rotate-origin-verify"
-  retention_in_days = var.lambda_log_retention
-}
-
-data "aws_iam_policy_document" "lambda_rotate_origin_verify" {
+# TODO: remove
+data "aws_iam_policy_document" "lambda_assume_role" {
   statement {
-    sid    = "AllowGetRandomPassword"
+    sid    = "AllowLambdaServiceAssumeRole"
     effect = "Allow"
 
-    actions = ["secretsmanager:GetRandomPassword"]
+    principals {
+      type        = "Service"
+      identifiers = ["lambda.amazonaws.com"]
+    }
 
-    resources = ["*"]
-  }
-
-  statement {
-    sid    = "AllowLambdaServiceUpdateSecretsManager"
-    effect = "Allow"
-
-    actions = [
-      "secretsmanager:DescribeSecret",
-      "secretsmanager:UpdateSecret",
-      "secretsmanager:UpdateSecretVersionStage",
-      "secretsmanager:GetSecretValue",
-      "secretsmanager:PutSecretValue"
-    ]
-
-    resources = [aws_secretsmanager_secret.origin_verify.arn]
-  }
-
-  statement {
-    sid    = "AllowLambdaServiceWriteLogs"
-    effect = "Allow"
-
-    actions = [
-      "logs:CreateLogStream",
-      "logs:PutLogEvents"
-    ]
-
-    resources = ["${aws_cloudwatch_log_group.lambda_rotate_origin_verify.arn}:*"]
-  }
-
-  statement {
-    sid    = "AllowLambdaServiceUpdateCloudFront"
-    effect = "Allow"
-
-    actions = [
-      "cloudfront:GetDistributionConfig",
-      "cloudfront:UpdateDistribution"
-    ]
-
-    resources = [aws_cloudfront_distribution.main.arn]
+    actions = ["sts:AssumeRole"]
   }
 }
 
-resource "aws_iam_policy" "lambda_rotate_origin_verify" {
-  name   = "lambda-rotate-origin-verify-policy"
-  policy = data.aws_iam_policy_document.lambda_rotate_origin_verify.json
-}
+module "lambda" {
+  source = "../../modules/lambda"
 
-resource "aws_iam_role" "lambda_rotate_origin_verify" {
-  name               = "lamdba-rotate-origin-verify-role"
-  assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
-}
-
-resource "aws_iam_role_policy_attachment" "lambda_rotate_origin_verify" {
-  role       = aws_iam_role.lambda_rotate_origin_verify.name
-  policy_arn = aws_iam_policy.lambda_rotate_origin_verify.arn
-}
-
-data "archive_file" "rotate_origin_verify" {
-  type        = "zip"
-  source_file = "${path.module}/../../lambda/rotate_secret/bin/rotate_origin_verify/bootstrap"
-  output_path = "${path.module}/../../lambda/rotate_secret/rotate_origin_verify.zip"
-}
-
-resource "aws_lambda_function" "rotate_origin_verify" {
-  function_name = "rotate-origin-verify"
-  role          = aws_iam_role.lambda_rotate_origin_verify.arn
-  publish       = true
-
-  filename         = data.archive_file.rotate_origin_verify.output_path
-  source_code_hash = data.archive_file.rotate_origin_verify.output_base64sha256
-  handler          = "bootstrap"
-  runtime          = "provided.al2"
-
-  environment {
-    variables = {
+  lambda_name = "rotate-origin-verify"
+  lambda_config = {
+    handler       = "bootstrap"
+    runtime       = "provided.al2"
+    bootstrap_dir = "${path.module}/../../lambda/rotate_secret/bin/rotate_origin_verify"
+    log_retention = 14
+    publish       = true
+    environment = {
       CLOUDFRONT_DISTRIBUTION_ID      = aws_cloudfront_distribution.main.id
       CLOUDFRONT_ORIGIN_ID            = var.backend_origin_id
       CLOUDFRONT_ORIGIN_VERIFY_HEADER = var.cloudfront_origin_verify_header
       SECRET_PASSWORD_LENGTH          = 32
       SECRET_EXCLUDE_PUNCTUATION      = true
     }
+
+    policy_statements = [
+      {
+        sid       = "AllowGetRandomPassword"
+        actions   = ["secretsmanager:GetRandomPassword"]
+        resources = ["*"]
+      },
+      {
+        sid = "AllowLambdaServiceUpdateSecretsManager"
+        actions = [
+          "secretsmanager:DescribeSecret",
+          "secretsmanager:UpdateSecret",
+          "secretsmanager:UpdateSecretVersionStage",
+          "secretsmanager:GetSecretValue",
+          "secretsmanager:PutSecretValue"
+        ]
+        resources = [aws_secretsmanager_secret.origin_verify.arn]
+      },
+      {
+        sid    = "AllowLambdaServiceUpdateCloudFront"
+        actions = [
+          "cloudfront:GetDistributionConfig",
+          "cloudfront:UpdateDistribution"
+        ]
+        resources = [aws_cloudfront_distribution.main.arn]
+      }
+    ]
   }
 }
 
 resource "aws_lambda_permission" "secretsmanager_invoke" {
   statement_id  = "AllowSecretsManagerInvoke"
-  function_name = aws_lambda_function.rotate_origin_verify.function_name
+  function_name = module.lambda.lambda_function_name
   action        = "lambda:InvokeFunction"
   principal     = "secretsmanager.amazonaws.com"
 }
@@ -469,7 +420,7 @@ resource "aws_secretsmanager_secret_version" "origin_verify" {
 
 resource "aws_secretsmanager_secret_rotation" "origin_verify" {
   secret_id           = aws_secretsmanager_secret.origin_verify.id
-  rotation_lambda_arn = aws_lambda_function.rotate_origin_verify.arn
+  rotation_lambda_arn = module.lambda.lambda_function_arn
 
   rotation_rules {
     automatically_after_days = var.origin_verify_rotation
