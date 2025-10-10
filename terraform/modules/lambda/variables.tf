@@ -1,8 +1,10 @@
 variable "lambda_name" {
-  type = string
+  description = "Name of the Lambda function"
+  type        = string
 }
 
 variable "lambda_config" {
+  description = "Configuration for the Lambda function"
   type = object({
     handler       = string
     runtime       = string

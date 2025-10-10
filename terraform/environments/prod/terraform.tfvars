@@ -9,17 +9,3 @@ backend_origin_id               = "backend-origin"
 cloudfront_origin_verify_header = "x-origin-verify"
 origin_verify_rotation          = 14
 lambda_log_retention            = 30
-
-dynamodb_tables = {
-  visitor_count = {
-    hash_key     = "id"
-    billing_mode = "PAY_PER_REQUEST"
-
-    attributes = [
-      {
-        name = "id"
-        type = "S"
-      }
-    ]
-  }
-}

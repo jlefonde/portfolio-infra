@@ -201,40 +201,25 @@ resource "aws_route53_record" "cloudfront_ipv6" {
   }
 }
 
-resource "aws_dynamodb_table" "tables" {
-  for_each = var.dynamodb_tables
+module "dynamodb" {
+  source = "../../modules/dynamodb"
 
-  name      = "${var.project_name}-${each.key}"
-  hash_key  = each.value.hash_key
-  range_key = each.value.range_key
+  for_each = {
+    visitor-count = {
+      hash_key     = "id"
+      billing_mode = "PAY_PER_REQUEST"
 
-  billing_mode   = each.value.billing_mode
-  read_capacity  = each.value.read_capacity
-  write_capacity = each.value.write_capacity
-
-  dynamic "attribute" {
-    for_each = each.value.attributes
-
-    content {
-      name = attribute.value.name
-      type = attribute.value.type
+      attributes = [
+        {
+          name = "id"
+          type = "S"
+        }
+      ]
     }
   }
 
-  dynamic "global_secondary_index" {
-    for_each = each.value.global_secondary_indexes != null ? each.value.global_secondary_indexes : []
-
-    content {
-      name            = global_secondary_index.value.name
-      hash_key        = global_secondary_index.value.hash_key
-      range_key       = global_secondary_index.value.range_key
-      projection_type = global_secondary_index.value.projection_type
-    }
-  }
-
-  tags = {
-    Name = "${var.project_name}-${each.key}"
-  }
+  table_name   = "${var.project_name}-${each.key}"
+  table_config = each.value
 }
 
 resource "aws_s3_bucket" "backend" {
@@ -270,7 +255,7 @@ data "aws_iam_policy_document" "lambda_api" {
       "dynamodb:UpdateItem"
     ]
 
-    resources = [aws_dynamodb_table.tables["visitor_count"].arn]
+    resources = [module.dynamodb["visitor-count"].table_arn]
   }
 
   statement {
