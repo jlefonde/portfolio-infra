@@ -65,21 +65,38 @@ resource "aws_iam_role_policy_attachment" "lambda" {
 
 data "archive_file" "lambda" {
   type        = "zip"
-  source_file = "${var.lambda_config.bootstrap_dir}/bootstrap"
-  output_path = "${var.lambda_config.bootstrap_dir}/${var.lambda_name}.zip"
+  source_file = "${var.lambda_config.source_dir}/bootstrap"
+  output_path = "${var.lambda_config.source_dir}/${var.lambda_name}.zip"
+}
+
+resource "aws_s3_object" "lambda" {
+  count = var.lambda_config.use_s3 ? 1 : 0
+
+  bucket      = var.lambda_config.s3_bucket
+  key         = "bootstrap/bootstrap.zip"
+  source      = data.archive_file.lambda.output_path
+  source_hash = data.archive_file.lambda.output_base64sha256
 }
 
 resource "aws_lambda_function" "lambda" {
   function_name = var.lambda_name
   role          = aws_iam_role.lambda.arn
-  publish       = true
+  publish       = var.lambda_config.publish
 
-  filename         = data.archive_file.lambda.output_path
-  source_code_hash = data.archive_file.lambda.output_base64sha256
-  handler          = var.lambda_config.handler
-  runtime          = var.lambda_config.runtime
+  filename         = !var.lambda_config.use_s3 ? data.archive_file.lambda.output_path : null
+  source_code_hash = !var.lambda_config.use_s3 ? data.archive_file.lambda.output_base64sha256 : null
+  s3_key           = var.lambda_config.use_s3 ? aws_s3_object.lambda[0].key : null
+  s3_bucket        = var.lambda_config.use_s3 ? var.lambda_config.s3_bucket : null
+
+  handler = var.lambda_config.handler
+  runtime = var.lambda_config.runtime
 
   environment {
     variables = var.lambda_config.environment
+  }
+
+  depends_on = [aws_s3_object.lambda]
+  lifecycle {
+    ignore_changes = [s3_key]
   }
 }

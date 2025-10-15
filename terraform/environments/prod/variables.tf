@@ -52,3 +52,13 @@ variable "lambda_log_retention" {
   description = "Number of days to retain log events for lambda"
   type        = number
 }
+
+# See: https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/using-managed-cache-policies.html
+variable "cloudfront_cache_policy_ids" {
+  description = "Number of days to retain log events for lambda"
+  type = map(string)
+  default = {
+    caching_disabled  = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"
+    caching_optimized = "658327ea-f89d-4fab-a63d-7e88639e58f6"
+  }
+}

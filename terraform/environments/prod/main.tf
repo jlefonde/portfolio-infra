@@ -1,17 +1,12 @@
 locals {
-  # See: https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/using-managed-cache-policies.html
-  cloudfront_cache_policies = {
-    caching_disabled  = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"
-    caching_optimized = "658327ea-f89d-4fab-a63d-7e88639e58f6"
-  }
-
   lambda_functions = {
     rotate-origin-verify = {
       handler       = "bootstrap"
       runtime       = "provided.al2"
-      bootstrap_dir = "${path.module}/../../lambda/rotate_secret/bin/rotate_origin_verify"
-      log_retention = 14
+      source_dir    = "${path.module}/../../lambda/rotate_secret/bin/rotate_origin_verify"
       publish       = true
+      enable_log    = true
+      log_retention = var.lambda_log_retention
       environment = {
         CLOUDFRONT_DISTRIBUTION_ID      = aws_cloudfront_distribution.main.id
         CLOUDFRONT_ORIGIN_ID            = var.backend_origin_id
@@ -19,7 +14,6 @@ locals {
         SECRET_PASSWORD_LENGTH          = 32
         SECRET_EXCLUDE_PUNCTUATION      = true
       }
-
       policy_statements = [
         {
           sid       = "AllowGetRandomPassword"
@@ -117,7 +111,7 @@ resource "aws_cloudfront_distribution" "main" {
 
   origin {
     origin_id   = var.backend_origin_id
-    domain_name = replace(aws_apigatewayv2_api.primary.api_endpoint, "https://", "")
+    domain_name = replace(module.api_gateway.api_endpoint, "https://", "")
 
     custom_origin_config {
       http_port              = 80
@@ -145,7 +139,7 @@ resource "aws_cloudfront_distribution" "main" {
     target_origin_id = var.frontend_origin_id
 
     viewer_protocol_policy = "redirect-to-https"
-    cache_policy_id        = local.cloudfront_cache_policies.caching_optimized
+    cache_policy_id        = var.cloudfront_cache_policy_ids.caching_optimized
   }
 
   ordered_cache_behavior {
@@ -155,7 +149,7 @@ resource "aws_cloudfront_distribution" "main" {
     target_origin_id = var.backend_origin_id
 
     viewer_protocol_policy   = "redirect-to-https"
-    cache_policy_id          = local.cloudfront_cache_policies.caching_disabled
+    cache_policy_id          = var.cloudfront_cache_policy_ids.caching_disabled
     origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer_except_host.id
   }
 
@@ -227,158 +221,6 @@ resource "aws_s3_bucket" "backend" {
   force_destroy = true
 }
 
-data "archive_file" "bootstrap_lambda" {
-  type        = "zip"
-  source_file = "${path.module}/../../lambda/bootstrap/bootstrap"
-  output_path = "${path.module}/../../lambda/bootstrap/bootstrap.zip"
-}
-
-resource "aws_s3_object" "bootstrap_lambda" {
-  bucket      = aws_s3_bucket.backend.bucket
-  key         = "bootstrap/bootstrap.zip"
-  source      = data.archive_file.bootstrap_lambda.output_path
-  source_hash = data.archive_file.bootstrap_lambda.output_base64sha256
-}
-
-data "aws_iam_policy_document" "lambda_api" {
-  statement {
-    sid    = "AllowLambdaServiceAccessDynamoDb"
-    effect = "Allow"
-
-    actions = [
-      "dynamodb:BatchGetItem",
-      "dynamodb:GetItem",
-      "dynamodb:Query",
-      "dynamodb:Scan",
-      "dynamodb:BatchWriteItem",
-      "dynamodb:PutItem",
-      "dynamodb:UpdateItem"
-    ]
-
-    resources = [module.dynamodb["visitor-count"].table_arn]
-  }
-
-  statement {
-    sid    = "AllowLambdaServiceWriteLogs"
-    effect = "Allow"
-
-    actions = [
-      "logs:CreateLogStream",
-      "logs:PutLogEvents"
-    ]
-
-    resources = [
-      "${aws_cloudwatch_log_group.lambda_visitor_count.arn}:*"
-    ]
-  }
-}
-
-resource "aws_cloudwatch_log_group" "lambda_visitor_count" {
-  name              = "/aws/lambda/visitor-count"
-  retention_in_days = var.lambda_log_retention
-}
-
-resource "aws_iam_policy" "lambda_api" {
-  name   = "lambda-api-policy"
-  policy = data.aws_iam_policy_document.lambda_api.json
-}
-
-resource "aws_iam_role" "lambda_api" {
-  name               = "lamdba-api-role"
-  assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
-}
-
-resource "aws_iam_role_policy_attachment" "lambda_api" {
-  role       = aws_iam_role.lambda_api.name
-  policy_arn = aws_iam_policy.lambda_api.arn
-}
-
-resource "aws_lambda_function" "api" {
-  function_name = "visitor-count"
-  role          = aws_iam_role.lambda_api.arn
-  publish       = true
-
-  s3_bucket = aws_s3_bucket.backend.bucket
-  s3_key    = "bootstrap/bootstrap.zip"
-
-  handler = "bootstrap"
-  runtime = "provided.al2"
-
-  depends_on = [aws_s3_object.bootstrap_lambda]
-  lifecycle {
-    ignore_changes = [s3_key, source_code_hash]
-  }
-}
-
-resource "aws_apigatewayv2_api" "primary" {
-  name            = "${var.domain_name}-api"
-  protocol_type   = "HTTP"
-  ip_address_type = "dualstack"
-  description     = "HTTP API with Lambda integrations"
-
-  cors_configuration {
-    allow_origins = ["https://${var.domain_name}"]
-    allow_methods = ["GET", "POST", "OPTIONS"]
-  }
-}
-
-resource "aws_apigatewayv2_stage" "default" {
-  api_id      = aws_apigatewayv2_api.primary.id
-  name        = "$default"
-  auto_deploy = true
-}
-
-resource "aws_lambda_permission" "apigateway_invoke" {
-  statement_id  = "AllowAPIGatewayInvoke"
-  function_name = aws_lambda_function.api.function_name
-  action        = "lambda:InvokeFunction"
-  principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_apigatewayv2_api.primary.execution_arn}/*/*/visitor-count/{id}"
-}
-
-resource "aws_apigatewayv2_integration" "visitor_count" {
-  api_id                 = aws_apigatewayv2_api.primary.id
-  integration_type       = "AWS_PROXY"
-  integration_method     = "POST"
-  integration_uri        = aws_lambda_function.api.invoke_arn
-  payload_format_version = "2.0"
-}
-
-resource "aws_apigatewayv2_route" "get_visitor_count" {
-  api_id    = aws_apigatewayv2_api.primary.id
-  route_key = "GET /api/visitor-count/{id}"
-
-  authorization_type = "CUSTOM"
-  authorizer_id      = aws_apigatewayv2_authorizer.origin_verify.id
-
-  target = "integrations/${aws_apigatewayv2_integration.visitor_count.id}"
-}
-
-resource "aws_apigatewayv2_route" "post_visitor_count" {
-  api_id    = aws_apigatewayv2_api.primary.id
-  route_key = "POST /api/visitor-count/{id}"
-
-  authorization_type = "CUSTOM"
-  authorizer_id      = aws_apigatewayv2_authorizer.origin_verify.id
-
-  target = "integrations/${aws_apigatewayv2_integration.visitor_count.id}"
-}
-
-# TODO: remove
-data "aws_iam_policy_document" "lambda_assume_role" {
-  statement {
-    sid    = "AllowLambdaServiceAssumeRole"
-    effect = "Allow"
-
-    principals {
-      type        = "Service"
-      identifiers = ["lambda.amazonaws.com"]
-    }
-
-    actions = ["sts:AssumeRole"]
-  }
-}
-
 module "lambda" {
   source   = "../../modules/lambda"
   for_each = local.lambda_functions
@@ -415,90 +257,4 @@ resource "aws_secretsmanager_secret_rotation" "origin_verify" {
   rotation_rules {
     automatically_after_days = var.origin_verify_rotation
   }
-}
-
-data "archive_file" "origin_verify_authorizer" {
-  type        = "zip"
-  source_file = "${path.module}/../../lambda/api_authorizer/bootstrap"
-  output_path = "${path.module}/../../lambda/api_authorizer/origin_verify_authorizer.zip"
-}
-
-resource "aws_cloudwatch_log_group" "lambda_origin_verify_authorizer" {
-  name              = "/aws/lambda/origin-verify-authorizer"
-  retention_in_days = var.lambda_log_retention
-}
-
-data "aws_iam_policy_document" "lambda_origin_verify_secret_access" {
-  statement {
-    sid    = "AllowLamdaAccessOriginVerifySecret"
-    effect = "Allow"
-
-    actions = ["secretsmanager:GetSecretValue"]
-
-    resources = [aws_secretsmanager_secret.origin_verify.arn]
-  }
-
-  statement {
-    sid    = "AllowLambdaServiceWriteLogs"
-    effect = "Allow"
-
-    actions = [
-      "logs:CreateLogStream",
-      "logs:PutLogEvents"
-    ]
-
-    resources = ["${aws_cloudwatch_log_group.lambda_origin_verify_authorizer.arn}:*"]
-  }
-}
-
-resource "aws_iam_policy" "lambda_origin_verify_authorizer" {
-  name   = "lambda-origin-verify-authorizer"
-  policy = data.aws_iam_policy_document.lambda_origin_verify_secret_access.json
-}
-
-resource "aws_iam_role" "lambda_origin_verify_authorizer" {
-  name               = "lambda-origin-verify-authorizer-role"
-  assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
-}
-
-resource "aws_iam_role_policy_attachment" "lambda_origin_verify_authorizer" {
-  role       = aws_iam_role.lambda_origin_verify_authorizer.name
-  policy_arn = aws_iam_policy.lambda_origin_verify_authorizer.arn
-}
-
-resource "aws_lambda_function" "origin_verify_authorizer" {
-  function_name = "origin-verify-authorizer"
-  role          = aws_iam_role.lambda_origin_verify_authorizer.arn
-  publish       = true
-
-  filename         = data.archive_file.origin_verify_authorizer.output_path
-  source_code_hash = data.archive_file.origin_verify_authorizer.output_base64sha256
-  handler          = "bootstrap"
-  runtime          = "provided.al2"
-
-  environment {
-    variables = {
-      CLOUDFRONT_ORIGIN_VERIFY_HEADER = var.cloudfront_origin_verify_header
-      SECRET_NAME                     = aws_secretsmanager_secret.origin_verify.name
-    }
-  }
-}
-
-resource "aws_lambda_permission" "origin_verify_authorizer_invoke" {
-  statement_id  = "AllowAPIGatewayAuthorizerInvoke"
-  function_name = aws_lambda_function.origin_verify_authorizer.function_name
-  action        = "lambda:InvokeFunction"
-  principal     = "apigateway.amazonaws.com"
-
-  source_arn = "${aws_apigatewayv2_api.primary.execution_arn}/authorizers/${aws_apigatewayv2_authorizer.origin_verify.id}"
-}
-
-resource "aws_apigatewayv2_authorizer" "origin_verify" {
-  api_id                            = aws_apigatewayv2_api.primary.id
-  authorizer_type                   = "REQUEST"
-  authorizer_uri                    = aws_lambda_function.origin_verify_authorizer.invoke_arn
-  identity_sources                  = ["$request.header.${var.cloudfront_origin_verify_header}"]
-  name                              = "origin-verify-authorizer"
-  authorizer_payload_format_version = "2.0"
-  enable_simple_responses           = true
 }

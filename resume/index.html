@@ -193,7 +193,7 @@
     </div>
     <script>
         async function getVisitorCount() {
-            const url = "/api/visitor-count/main"
+            const url = "/api/visitors/main"
             try {
                 const response = await fetch(url)
                 if (!response.ok) {
@@ -225,7 +225,7 @@
                 localStorage.setItem('visitorCountDate', now);
             }
 
-            const url = "/api/visitor-count/main"
+            const url = "/api/visitors/main"
             try {
                 const response = await fetch(url, {
                     method: "POST"
