@@ -13,12 +13,7 @@ locals {
         {
           sid = "AllowLambdaServiceAccessDynamoDb"
           actions = [
-            "dynamodb:BatchGetItem",
             "dynamodb:GetItem",
-            "dynamodb:Query",
-            "dynamodb:Scan",
-            "dynamodb:BatchWriteItem",
-            "dynamodb:PutItem",
             "dynamodb:UpdateItem"
           ]
           resources = [module.dynamodb["visitor-count"].table_arn]
@@ -96,7 +91,7 @@ locals {
     for auth_key, auth_config in local.api_config.authorizers : auth_key => merge(
       auth_config,
       {
-        authorizer_uri = module.api_lambdas["origin-verify-authorizer"].lambda_function_invoke_arn
+        authorizer_uri = module.api_lambdas[auth_config.name].lambda_function_invoke_arn
       }
     )
   }
