@@ -28,6 +28,16 @@ variable "environment" {
   type        = string
 }
 
+variable "cloudfront_frontend_origin_cache_policy" {
+  description = "The Cloudfront's frontend origin cache policy"
+  type        = string
+}
+
+variable "cloudfront_backend_origin_cache_policy" {
+  description = "The Cloudfront's backend origin cache policy"
+  type        = string
+}
+
 variable "origin_verify_rotation" {
   description = "Number of days between automatic scheduled secret rotation"
   type        = number

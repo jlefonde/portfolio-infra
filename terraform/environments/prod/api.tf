@@ -28,7 +28,7 @@ locals {
       enable_log    = true
       log_retention = var.lambda_log_retention
       environment = {
-        CLOUDFRONT_ORIGIN_VERIFY_HEADER = module.cloudfront.origin_verify_header
+        CLOUDFRONT_ORIGIN_VERIFY_HEADER = module.cdn.origin_verify_header
         SECRET_NAME                     = aws_secretsmanager_secret.origin_verify.name
       }
       policy_statements = [
@@ -48,7 +48,7 @@ locals {
 
     authorizers = {
       origin-verify = {
-        identity_sources                  = ["$request.header.${module.cloudfront.origin_verify_header}"]
+        identity_sources                  = ["$request.header.${module.cdn.origin_verify_header}"]
         name                              = "origin-verify-authorizer"
         authorizer_payload_format_version = "2.0"
         enable_simple_responses           = true

@@ -8,9 +8,9 @@ locals {
       enable_log    = true
       log_retention = var.lambda_log_retention
       environment = {
-        CLOUDFRONT_DISTRIBUTION_ID      = module.cloudfront.distribution_arn
-        CLOUDFRONT_ORIGIN_ID            = module.cloudfront.backend_origin_id
-        CLOUDFRONT_ORIGIN_VERIFY_HEADER = module.cloudfront.origin_verify_header
+        CLOUDFRONT_DISTRIBUTION_ID      = module.cdn.distribution_arn
+        CLOUDFRONT_ORIGIN_ID            = module.cdn.backend_origin_id
+        CLOUDFRONT_ORIGIN_VERIFY_HEADER = module.cdn.origin_verify_header
         SECRET_PASSWORD_LENGTH          = 32
         SECRET_EXCLUDE_PUNCTUATION      = true
       }
@@ -37,20 +37,22 @@ locals {
             "cloudfront:GetDistributionConfig",
             "cloudfront:UpdateDistribution"
           ]
-          resources = [module.cloudfront.distribution_arn]
+          resources = [module.cdn.distribution_arn]
         }
       ]
     }
   }
 }
 
-module "cloudfront" {
-  source = "../../modules/cloudfront"
+module "cdn" {
+  source = "../../modules/cdn"
 
   zone_name = var.zone_name
   domain_name = var.domain_name
   acm_wildcard = var.acm_wildcard
-  cloudfront_origin_verify_secret = aws_secretsmanager_secret_version.origin_verify.secret_string
+  frontend_origin_cache_policy = var.cloudfront_frontend_origin_cache_policy
+  backend_origin_cache_policy = var.cloudfront_backend_origin_cache_policy
+  origin_verify_header_value = aws_secretsmanager_secret_version.origin_verify.secret_string
   api_gateway_endpoint = module.api_gateway.api_endpoint
 }
 

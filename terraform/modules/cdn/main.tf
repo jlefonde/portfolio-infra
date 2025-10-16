@@ -1,8 +1,8 @@
 locals {
   # See: https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/using-managed-cache-policies.html
   cloudfront_cache_policy_ids = {
-    caching_disabled  = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"
-    caching_optimized = "658327ea-f89d-4fab-a63d-7e88639e58f6"
+    CachingDisabled  = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"
+    CachingOptimized = "658327ea-f89d-4fab-a63d-7e88639e58f6"
   }
   cloudfront_origin_verify_header = "x-origin-verify"
   frontend_origin_id              = "frontend-origin"
@@ -77,7 +77,7 @@ resource "aws_cloudfront_distribution" "main" {
 
     custom_header {
       name  = local.cloudfront_origin_verify_header
-      value = var.cloudfront_origin_verify_secret
+      value = var.origin_verify_header_value
     }
   }
 
@@ -94,7 +94,7 @@ resource "aws_cloudfront_distribution" "main" {
     target_origin_id = local.frontend_origin_id
 
     viewer_protocol_policy = "redirect-to-https"
-    cache_policy_id        = local.cloudfront_cache_policy_ids.caching_optimized
+    cache_policy_id        = lookup(local.cloudfront_cache_policy_ids, var.frontend_origin_cache_policy)
   }
 
   ordered_cache_behavior {
@@ -104,7 +104,7 @@ resource "aws_cloudfront_distribution" "main" {
     target_origin_id = local.backend_origin_id
 
     viewer_protocol_policy   = "redirect-to-https"
-    cache_policy_id          = local.cloudfront_cache_policy_ids.caching_disabled
+    cache_policy_id          = lookup(local.cloudfront_cache_policy_ids, var.backend_origin_cache_policy)
     origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer_except_host.id
   }
 

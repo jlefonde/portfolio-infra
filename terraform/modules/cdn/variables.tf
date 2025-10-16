@@ -13,8 +13,18 @@ variable "acm_wildcard" {
   type        = string
 }
 
-variable "cloudfront_origin_verify_secret" {
-  description = "The origin-verify secret value"
+variable "frontend_origin_cache_policy" {
+  description = "The frontend origin cache policy"
+  type        = string
+}
+
+variable "backend_origin_cache_policy" {
+  description = "The backend origin cache policy"
+  type        = string
+}
+
+variable "origin_verify_header_value" {
+  description = "The request origin-verify header value for the API authorizer"
   type        = string
   sensitive   = true
 }
