@@ -29,13 +29,13 @@ locals {
       log_retention = var.lambda_log_retention
       environment = {
         CLOUDFRONT_ORIGIN_VERIFY_HEADER = module.cdn.origin_verify_header
-        SECRET_NAME                     = aws_secretsmanager_secret.origin_verify.name
+        SECRET_NAME                     = local.origin_verify_secret_name
       }
       policy_statements = [
         {
           sid       = "AllowLamdaAccessOriginVerifySecret"
           actions   = ["secretsmanager:GetSecretValue"]
-          resources = [aws_secretsmanager_secret.origin_verify.arn]
+          resources = [module.secrets[local.origin_verify_secret_name].secret_arn]
         }
       ]
     }
