@@ -13,3 +13,7 @@ output "backend_origin_id" {
 output "origin_verify_header" {
   value = local.cloudfront_origin_verify_header
 }
+
+output "frontend_bucket_arn" {
+  value = aws_s3_bucket.frontend.arn
+}
