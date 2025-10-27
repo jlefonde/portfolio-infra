@@ -17,3 +17,7 @@ output "origin_verify_header" {
 output "frontend_bucket_arn" {
   value = aws_s3_bucket.frontend.arn
 }
+
+output "frontend_bucket_name" {
+  value = aws_s3_bucket.frontend.bucket
+}

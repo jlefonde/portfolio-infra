@@ -36,14 +36,14 @@ resource "aws_s3_bucket" "backend" {
   force_destroy = true
 }
 
-resource "aws_ssm_parameter" "frontend_bucket_arn" {
-  name  = "/${var.project_name}/s3/frontend-bucket-arn"
+resource "aws_ssm_parameter" "frontend_bucket_name" {
+  name  = "/${var.project_name}/s3/frontend-bucket-name"
   type  = "String"
-  value = module.cdn.frontend_bucket_arn
+  value = module.cdn.frontend_bucket_name
 }
 
-resource "aws_ssm_parameter" "backend_bucket_arn" {
-  name  = "/${var.project_name}/s3/backend-bucket-arn"
+resource "aws_ssm_parameter" "backend_bucket_name" {
+  name  = "/${var.project_name}/s3/backend-bucket-name"
   type  = "String"
-  value = aws_s3_bucket.backend.arn
+  value = aws_s3_bucket.backend.bucket
 }

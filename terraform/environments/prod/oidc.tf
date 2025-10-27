@@ -31,11 +31,28 @@ data "aws_iam_policy_document" "oidc_assume_role" {
 
 data "aws_iam_policy_document" "oidc_frontend" {
   statement {
+    sid = "AllowS3Sync"
     effect = "Allow"
 
-    actions = ["s3:PutObject"]
+    actions = [
+      "s3:ListBucket",
+      "s3:PutObject",
+      "s3:DeleteObject"
+    ]
 
-    resources = ["${module.cdn.frontend_bucket_arn}/*"]
+    resources = [
+      module.cdn.frontend_bucket_arn,
+      "${module.cdn.frontend_bucket_arn}/*"
+    ]
+  }
+
+  statement {
+    sid = "AllowSSMParameterRead"
+    effect = "Allow"
+
+    actions = ["ssm:GetParameter"]
+
+    resources = [aws_ssm_parameter.frontend_bucket_name.arn]
   }
 }
 
@@ -52,4 +69,8 @@ resource "aws_iam_role_policy_attachment" "name" {
 resource "aws_iam_role" "oidc_frontend" {
   name               = "oidc-frontend-role"
   assume_role_policy = data.aws_iam_policy_document.oidc_assume_role.json
+}
+
+output "oidc_frontend_role_arn" {
+  value = aws_iam_role.oidc_frontend.arn
 }
