@@ -1,13 +1,13 @@
 module "cdn" {
   source = "../../modules/cdn"
 
-  zone_name = var.zone_name
-  domain_name = var.domain_name
-  acm_wildcard = var.acm_wildcard
+  zone_name                    = var.zone_name
+  domain_name                  = var.domain_name
+  acm_wildcard                 = var.acm_wildcard
   frontend_origin_cache_policy = var.cloudfront_frontend_origin_cache_policy
-  backend_origin_cache_policy = var.cloudfront_backend_origin_cache_policy
-  origin_verify_header_value = module.secrets[local.origin_verify_secret_name].secret_string
-  api_gateway_endpoint = module.api_gateway.api_endpoint
+  backend_origin_cache_policy  = var.cloudfront_backend_origin_cache_policy
+  origin_verify_header_value   = module.secrets[local.origin_verify_secret_name].secret_string
+  api_gateway_endpoint         = module.api_gateway.api_endpoint
 }
 
 module "dynamodb" {

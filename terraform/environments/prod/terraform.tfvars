@@ -1,6 +1,7 @@
 project_name                            = "crc"
 region                                  = "eu-central-1"
 environment                             = "Production"
+frontend_repo                           = "jlefonde/crc_frontend"
 zone_name                               = "jorislefondeur.com"
 domain_name                             = "jorislefondeur.com"
 acm_wildcard                            = "*.jorislefondeur.com"

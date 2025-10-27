@@ -28,6 +28,11 @@ variable "environment" {
   type        = string
 }
 
+variable "frontend_repo" {
+  description = "The path to frontend repo"
+  type        = string
+}
+
 variable "cloudfront_frontend_origin_cache_policy" {
   description = "The Cloudfront's frontend origin cache policy"
   type        = string
