@@ -24,7 +24,7 @@ data "aws_iam_policy_document" "oidc_assume_role" {
     condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.frontend_repo}:ref:refs/heads/${local.repo_branch[var.environment]}"]
+      values   = ["repo:${var.frontend_repo}:environment:${var.environment}"]
     }
   }
 }
