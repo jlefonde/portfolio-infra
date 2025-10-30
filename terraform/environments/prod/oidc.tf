@@ -31,7 +31,7 @@ data "aws_iam_policy_document" "oidc_assume_role" {
 
 data "aws_iam_policy_document" "oidc_frontend" {
   statement {
-    sid = "AllowS3Sync"
+    sid    = "AllowS3Sync"
     effect = "Allow"
 
     actions = [
@@ -47,12 +47,24 @@ data "aws_iam_policy_document" "oidc_frontend" {
   }
 
   statement {
-    sid = "AllowSSMParameterRead"
+    sid    = "AllowSSMParameterRead"
     effect = "Allow"
 
     actions = ["ssm:GetParameter"]
 
-    resources = [aws_ssm_parameter.frontend_bucket_name.arn]
+    resources = [
+      aws_ssm_parameter.frontend_bucket_name.arn,
+      aws_ssm_parameter.distribution_id.arn
+    ]
+  }
+
+  statement {
+    sid    = "AllowCreateCloudfrontInvalidation"
+    effect = "Allow"
+
+    actions = ["cloudfront:CreateInvalidation"]
+
+    resources = [module.cdn.distribution_arn]
   }
 }
 

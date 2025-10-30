@@ -47,3 +47,9 @@ resource "aws_ssm_parameter" "backend_bucket_name" {
   type  = "String"
   value = aws_s3_bucket.backend.bucket
 }
+
+resource "aws_ssm_parameter" "distribution_id" {
+  name  = "/${var.project_name}/cloudfront/distribution-id"
+  type  = "String"
+  value = module.cdn.distribution_id
+}
