@@ -1,7 +1,11 @@
+resource "aws_route53_zone" "this" {
+  name = var.zone_name
+}
+
 module "cdn" {
   source = "../../modules/cdn"
 
-  zone_name                    = var.zone_name
+  zone_id                      = aws_route53_zone.this.zone_id
   domain_name                  = var.domain_name
   acm_wildcard                 = var.acm_wildcard
   frontend_origin_cache_policy = var.cloudfront_frontend_origin_cache_policy

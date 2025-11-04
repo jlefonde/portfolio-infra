@@ -82,7 +82,3 @@ resource "aws_iam_role" "oidc_frontend" {
   name               = "oidc-frontend-role"
   assume_role_policy = data.aws_iam_policy_document.oidc_assume_role.json
 }
-
-output "oidc_frontend_role_arn" {
-  value = aws_iam_role.oidc_frontend.arn
-}

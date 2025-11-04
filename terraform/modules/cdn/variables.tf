@@ -1,5 +1,5 @@
-variable "zone_name" {
-  description = "The Route53 zone name"
+variable "zone_id" {
+  description = "The Route53 zone ID"
   type        = string
 }
 

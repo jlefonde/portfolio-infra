@@ -60,7 +60,7 @@ data "aws_cloudfront_origin_request_policy" "all_viewer_except_host" {
 resource "aws_cloudfront_distribution" "main" {
   origin {
     origin_id                = local.frontend_origin_id
-    domain_name              = aws_s3_bucket.frontend.bucket_domain_name
+    domain_name              = aws_s3_bucket.frontend.bucket_regional_domain_name
     origin_access_control_id = aws_cloudfront_origin_access_control.default.id
   }
 
@@ -111,6 +111,7 @@ resource "aws_cloudfront_distribution" "main" {
   viewer_certificate {
     acm_certificate_arn = data.aws_acm_certificate.frontend.arn
     ssl_support_method  = "sni-only"
+    minimum_protocol_version = "TLSv1.2_2021"
   }
 
   enabled             = true
@@ -124,12 +125,8 @@ resource "aws_cloudfront_distribution" "main" {
   }
 }
 
-data "aws_route53_zone" "primary" {
-  name = var.zone_name
-}
-
 resource "aws_route53_record" "cloudfront_ipv4" {
-  zone_id = data.aws_route53_zone.primary.zone_id
+  zone_id = var.zone_id
   name    = var.domain_name
   type    = "A"
   alias {
@@ -140,7 +137,7 @@ resource "aws_route53_record" "cloudfront_ipv4" {
 }
 
 resource "aws_route53_record" "cloudfront_ipv6" {
-  zone_id = data.aws_route53_zone.primary.zone_id
+  zone_id = var.zone_id
   name    = var.domain_name
   type    = "AAAA"
   alias {
