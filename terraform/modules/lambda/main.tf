@@ -53,14 +53,9 @@ resource "aws_iam_role" "lambda" {
   assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
 }
 
-resource "aws_iam_policy" "lambda" {
-  name   = "lambda-${var.lambda_name}-policy"
+resource "aws_iam_role_policy" "lambda" {
+  role   = aws_iam_role.lambda.name
   policy = data.aws_iam_policy_document.lambda.json
-}
-
-resource "aws_iam_role_policy_attachment" "lambda" {
-  role       = aws_iam_role.lambda.name
-  policy_arn = aws_iam_policy.lambda.arn
 }
 
 data "archive_file" "lambda" {

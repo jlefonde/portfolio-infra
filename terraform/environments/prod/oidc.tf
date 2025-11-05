@@ -1,16 +1,24 @@
 locals {
   oidc_roles = {
     frontend = {
-      subject = "repo:${var.frontend_repo}:environment:${var.environment}"
+      subject             = "repo:${var.frontend_repo}:environment:${var.environment}"
+      managed_policy_arns = []
+      inline_policy       = data.aws_iam_policy_document.oidc_frontend.json
     }
     backend = {
-      subject = "repo:${var.backend_repo}:environment:${var.environment}"
+      subject             = "repo:${var.backend_repo}:environment:${var.environment}"
+      managed_policy_arns = []
+      inline_policy       = data.aws_iam_policy_document.oidc_backend.json
     }
     infra = {
-      subject = "repo:${var.infra_repo}:environment:${var.environment}"
+      subject             = "repo:${var.infra_repo}:environment:${var.environment}"
+      managed_policy_arns = ["arn:aws:iam::aws:policy/PowerUserAccess"]
+      inline_policy       = null
     }
     infra-read-only = {
-      subject = "repo:${var.infra_repo}:ref:refs/heads/main"
+      subject             = "repo:${var.infra_repo}:ref:refs/heads/main"
+      managed_policy_arns = ["arn:aws:iam::aws:policy/ReadOnlyAccess"]
+      inline_policy       = null
     }
   }
 }
@@ -94,16 +102,6 @@ data "aws_iam_policy_document" "oidc_frontend" {
   }
 }
 
-resource "aws_iam_policy" "oidc_frontend" {
-  name   = "oidc-frontend-policy"
-  policy = data.aws_iam_policy_document.oidc_frontend.json
-}
-
-resource "aws_iam_role_policy_attachment" "oidc_frontend" {
-  role       = aws_iam_role.oidc["frontend"].name
-  policy_arn = aws_iam_policy.oidc_frontend.arn
-}
-
 data "aws_iam_policy_document" "oidc_backend" {
   statement {
     sid    = "AllowS3Sync"
@@ -133,30 +131,28 @@ data "aws_iam_policy_document" "oidc_backend" {
   }
 }
 
-resource "aws_iam_policy" "oidc_backend" {
-  name   = "oidc-backend-policy"
-  policy = data.aws_iam_policy_document.oidc_backend.json
+resource "aws_iam_role_policy" "this" {
+  for_each = {
+    for role_key, role_value in local.oidc_roles : role_key => role_value
+    if role_value.inline_policy != null
+  }
+
+  role   = aws_iam_role.oidc[each.key].name
+  policy = each.value.inline_policy
 }
 
-resource "aws_iam_role_policy_attachment" "oidc_backend" {
-  role       = aws_iam_role.oidc["backend"].name
-  policy_arn = aws_iam_policy.oidc_backend.arn
-}
+resource "aws_iam_role_policy_attachment" "this" {
+  for_each = {
+    for pair in flatten([
+      for role_key, role_value in local.oidc_roles : [
+        for policy_arn in role_value.managed_policy_arns : {
+          role       = role_key
+          policy_arn = policy_arn
+        }
+      ]
+    ]) : "${pair.role}-${basename(pair.policy_arn)}" => pair
+  }
 
-data "aws_iam_policy" "power_user_access" {
-  name = "PowerUserAccess"
-}
-
-resource "aws_iam_role_policy_attachment" "oidc_infra" {
-  role       = aws_iam_role.oidc["infra"].name
-  policy_arn = data.aws_iam_policy.power_user_access.arn
-}
-
-data "aws_iam_policy" "read_only_access" {
-  name = "ReadOnlyAccess"
-}
-
-resource "aws_iam_role_policy_attachment" "oidc_infra_read_only" {
-  role       = aws_iam_role.oidc["infra-read-only"].name
-  policy_arn = data.aws_iam_policy.read_only_access.arn
+  role       = aws_iam_role.oidc[each.value.role].name
+  policy_arn = each.value.policy_arn
 }

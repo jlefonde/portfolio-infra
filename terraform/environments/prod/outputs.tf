@@ -3,5 +3,5 @@ output "oidc_role_arn" {
 }
 
 output "route53_name_servers" {
-  value = aws_route53_zone.this.name_servers
+  value = tolist(aws_route53_zone.this.name_servers)
 }
