@@ -1,9 +1,28 @@
+locals {
+  oidc_roles = {
+    frontend = {
+      subject = "repo:${var.frontend_repo}:environment:${var.environment}"
+    }
+    backend = {
+      subject = "repo:${var.backend_repo}:environment:${var.environment}"
+    }
+    infra = {
+      subject = "repo:${var.infra_repo}:environment:${var.environment}"
+    }
+    infra-read-only = {
+      subject = "repo:${var.infra_repo}:ref:refs/heads/main"
+    }
+  }
+}
+
 resource "aws_iam_openid_connect_provider" "github" {
   url            = "https://token.actions.githubusercontent.com"
   client_id_list = ["sts.amazonaws.com"]
 }
 
 data "aws_iam_policy_document" "oidc_assume_role" {
+  for_each = local.oidc_roles
+
   statement {
     sid    = "AllowWebIdentityAssumeRole"
     effect = "Allow"
@@ -24,9 +43,16 @@ data "aws_iam_policy_document" "oidc_assume_role" {
     condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.frontend_repo}:environment:${var.environment}"]
+      values   = [each.value.subject]
     }
   }
+}
+
+resource "aws_iam_role" "oidc" {
+  for_each = local.oidc_roles
+
+  name               = "oidc-${each.key}-role"
+  assume_role_policy = data.aws_iam_policy_document.oidc_assume_role[each.key].json
 }
 
 data "aws_iam_policy_document" "oidc_frontend" {
@@ -73,12 +99,64 @@ resource "aws_iam_policy" "oidc_frontend" {
   policy = data.aws_iam_policy_document.oidc_frontend.json
 }
 
-resource "aws_iam_role_policy_attachment" "name" {
-  role       = aws_iam_role.oidc_frontend.name
+resource "aws_iam_role_policy_attachment" "oidc_frontend" {
+  role       = aws_iam_role.oidc["frontend"].name
   policy_arn = aws_iam_policy.oidc_frontend.arn
 }
 
-resource "aws_iam_role" "oidc_frontend" {
-  name               = "oidc-frontend-role"
-  assume_role_policy = data.aws_iam_policy_document.oidc_assume_role.json
+data "aws_iam_policy_document" "oidc_backend" {
+  statement {
+    sid    = "AllowS3Sync"
+    effect = "Allow"
+
+    actions = [
+      "s3:ListBucket",
+      "s3:PutObject",
+      "s3:DeleteObject"
+    ]
+
+    resources = [
+      aws_s3_bucket.backend.arn,
+      "${aws_s3_bucket.backend.arn}/*"
+    ]
+  }
+
+  statement {
+    sid    = "AllowSSMParameterRead"
+    effect = "Allow"
+
+    actions = ["ssm:GetParameter"]
+
+    resources = [
+      aws_ssm_parameter.backend_bucket_name.arn
+    ]
+  }
+}
+
+resource "aws_iam_policy" "oidc_backend" {
+  name   = "oidc-backend-policy"
+  policy = data.aws_iam_policy_document.oidc_backend.json
+}
+
+resource "aws_iam_role_policy_attachment" "oidc_backend" {
+  role       = aws_iam_role.oidc["backend"].name
+  policy_arn = aws_iam_policy.oidc_backend.arn
+}
+
+data "aws_iam_policy" "power_user_access" {
+  name = "PowerUserAccess"
+}
+
+resource "aws_iam_role_policy_attachment" "oidc_infra" {
+  role       = aws_iam_role.oidc["infra"].name
+  policy_arn = data.aws_iam_policy.power_user_access.arn
+}
+
+data "aws_iam_policy" "read_only_access" {
+  name = "ReadOnlyAccess"
+}
+
+resource "aws_iam_role_policy_attachment" "oidc_infra_read_only" {
+  role       = aws_iam_role.oidc["infra-read-only"].name
+  policy_arn = data.aws_iam_policy.read_only_access.arn
 }

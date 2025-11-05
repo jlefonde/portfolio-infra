@@ -33,6 +33,16 @@ variable "frontend_repo" {
   type        = string
 }
 
+variable "backend_repo" {
+  description = "The path to backend repo"
+  type        = string
+}
+
+variable "infra_repo" {
+  description = "The path to infra repo"
+  type        = string
+}
+
 variable "cloudfront_frontend_origin_cache_policy" {
   description = "The Cloudfront's frontend origin cache policy"
   type        = string

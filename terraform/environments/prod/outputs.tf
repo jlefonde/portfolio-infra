@@ -1,5 +1,5 @@
-output "oidc_frontend_role_arn" {
-  value = aws_iam_role.oidc_frontend.arn
+output "oidc_role_arn" {
+  value = [ for k, v in aws_iam_role.oidc : v.arn]
 }
 
 output "route53_name_servers" {
