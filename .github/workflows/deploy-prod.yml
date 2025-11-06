@@ -14,7 +14,8 @@ permissions:
 
 jobs:
   plan:
-    if: github.ref == '/refs/head/main'
+    name: Plan Production
+    if: ${{ github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     env:
       VAR_FILE: "environments/prod"
