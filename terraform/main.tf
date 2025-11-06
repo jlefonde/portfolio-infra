@@ -3,7 +3,7 @@ resource "aws_route53_zone" "this" {
 }
 
 module "cdn" {
-  source = "../../modules/cdn"
+  source = "./modules/cdn"
 
   zone_id                      = aws_route53_zone.this.zone_id
   domain_name                  = var.domain_name
@@ -15,7 +15,7 @@ module "cdn" {
 }
 
 module "dynamodb" {
-  source = "../../modules/dynamodb"
+  source = "./modules/dynamodb"
 
   for_each = {
     visitor-count = {

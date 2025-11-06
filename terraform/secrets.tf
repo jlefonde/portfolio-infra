@@ -13,7 +13,7 @@ locals {
 }
 
 module "secrets" {
-  source   = "../../modules/secret"
+  source   = "./modules/secret"
   for_each = local.secrets
 
   secret_name        = each.key
@@ -26,7 +26,7 @@ locals {
     rotate-origin-verify = {
       handler       = "bootstrap"
       runtime       = "provided.al2"
-      source_dir    = "${path.module}/../../lambda/rotate_secret/bin/rotate_origin_verify"
+      source_dir    = "${path.root}/../lambda/rotate_secret/bin/rotate_origin_verify"
       publish       = true
       enable_log    = true
       log_retention = var.lambda_log_retention
@@ -68,7 +68,7 @@ locals {
 }
 
 module "rotation_lambdas" {
-  source   = "../../modules/lambda"
+  source   = "./modules/lambda"
   for_each = local.rotation_lambdas
 
   lambda_name   = each.key

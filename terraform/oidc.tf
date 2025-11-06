@@ -4,21 +4,23 @@ locals {
       subject             = "repo:${var.frontend_repo}:environment:${var.environment}"
       managed_policy_arns = []
       inline_policy       = data.aws_iam_policy_document.oidc_frontend.json
+      has_inline_policy   = true
     }
     backend = {
       subject             = "repo:${var.backend_repo}:environment:${var.environment}"
       managed_policy_arns = []
       inline_policy       = data.aws_iam_policy_document.oidc_backend.json
+      has_inline_policy   = true
     }
     infra = {
       subject             = "repo:${var.infra_repo}:environment:${var.environment}"
       managed_policy_arns = ["arn:aws:iam::aws:policy/PowerUserAccess"]
-      inline_policy       = null
+      has_inline_policy   = false
     }
     infra-read-only = {
       subject             = "repo:${var.infra_repo}:ref:refs/heads/main"
       managed_policy_arns = ["arn:aws:iam::aws:policy/ReadOnlyAccess"]
-      inline_policy       = null
+      has_inline_policy   = false
     }
   }
 }
@@ -134,7 +136,7 @@ data "aws_iam_policy_document" "oidc_backend" {
 resource "aws_iam_role_policy" "this" {
   for_each = {
     for role_key, role_value in local.oidc_roles : role_key => role_value
-    if role_value.inline_policy != null
+    if role_value.has_inline_policy
   }
 
   role   = aws_iam_role.oidc[each.key].name

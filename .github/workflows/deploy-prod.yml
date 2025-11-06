@@ -1,0 +1,142 @@
+name: Deploy Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "deploy" to confirm production deployment'
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  plan:
+    if: github.ref == '/refs/head/main'
+    runs-on: ubuntu-latest
+    env:
+      VAR_FILE: "environments/prod"
+      TFPLAN_BINARY: tfplan.binary
+      TFPLAN_TXT: tfplan.txt
+
+    steps:
+      - name: Validate Confirmation
+        if: github.event.inputs.confirm != 'deploy'
+        run: |
+          echo "::error::Deployment confirmation required. Please type 'deploy' to proceed."
+          exit 1
+
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ vars.TERRAFORM_VERSION }}
+
+      - name: Initialize Terraform
+        id: init
+        run: terraform init -input=false
+        working-directory: terraform/
+
+      - name: Format Terraform
+        id: fmt
+        run: terraform fmt -recursive -check
+        working-directory: terraform/
+        continue-on-error: true
+
+      - name: Validate Terraform
+        id: validate
+        run: terraform validate -no-color
+        working-directory: terraform/
+
+      - name: Plan Terraform
+        id: plan
+        run: |
+          terraform plan \
+            -var-file="$VAR_FILE" \
+            -out="$TFPLAN_BINARY" \
+            -detailed-exitcode \
+            -no-color \
+            -input=false
+
+          export TF_EXITCODE=$?
+          echo "exitcode=$TF_EXITCODE" >> $GITHUB_OUTPUT
+          [ "$TF_EXITCODE" -ne 1 ] || exit 1
+        working-directory: terraform/
+
+      - name: Create Plan Summary
+        if: always()
+        run: |
+          declare -gA outcomes=(
+            ["success"]="✅"
+            ["failure"]="❌"
+            ["cancelled"]="⛔"
+            ["skipped"]="⏭️"
+          )
+
+          echo "# 🚀 Terraform Plan - Production" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 📊 Overview" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Step | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "⚙️ Init | ${outcomes[${{ steps.init.outcome }}]} ${{ steps.init.outcome }}" >> $GITHUB_STEP_SUMMARY
+          echo "📝 Format | ${outcomes[${{ steps.fmt.outcome }}]} ${{ steps.fmt.outcome }}" >> $GITHUB_STEP_SUMMARY
+          echo "🛡️ Validate | ${outcomes[${{ steps.validate.outcome }}]} ${{ steps.validate.outcome }}" >> $GITHUB_STEP_SUMMARY
+          echo "📋 Plan | ${outcomes[${{ steps.plan.outcome }}]} ${{ steps.plan.outcome }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [[ "${{ steps.validate.outcome }}" != "success" ]]; then
+            echo "<details>" >> $GITHUB_STEP_SUMMARY
+            echo "<summary>🔍 Click to view detailed validation</summary>" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo '```terraform' >> $GITHUB_STEP_SUMMARY
+            echo '${{ steps.validate.outputs.stdout }}' >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "</details>" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "## 📋 Plan Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [[ "${{ steps.plan.outputs.exitcode }}" == "0" ]]; then
+            echo "### ✅ No Changes Detected" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Infrastructure is up to date. No changes required." >> $GITHUB_STEP_SUMMARY
+          elif [[ "${{ steps.plan.outputs.exitcode }}" == "2" ]]; then
+            echo "### ⚠️ Changes Detected - Review Required" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "<details>" >> $GITHUB_STEP_SUMMARY
+            echo "<summary>🔍 Click to view detailed plan</summary>" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo '```terraform' >> $GITHUB_STEP_SUMMARY
+            terraform show $TFPLAN_BINARY -no-color >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "</details>" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ❌ Plan Failed" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Please review the workflow logs for error details." >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## ℹ️ Metadata" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Timestamp:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Triggered by:** @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch:** \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Workflow:** [${{ github.workflow }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
+        working-directory: terraform/

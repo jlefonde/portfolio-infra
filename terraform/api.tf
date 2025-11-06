@@ -3,7 +3,7 @@ locals {
     visitor-count = {
       handler       = "bootstrap"
       runtime       = "provided.al2"
-      source_dir    = "${path.module}/../../lambda/bootstrap"
+      source_dir    = "${path.root}/../lambda/bootstrap"
       use_s3        = true
       s3_bucket     = aws_s3_bucket.backend.bucket
       s3_key        = "bootstrap/bootstrap.zip"
@@ -23,7 +23,7 @@ locals {
     origin-verify-authorizer = {
       handler       = "bootstrap"
       runtime       = "provided.al2"
-      source_dir    = "${path.module}/../../lambda/api_authorizer"
+      source_dir    = "${path.root}/../lambda/api_authorizer"
       publish       = true
       enable_log    = true
       log_retention = var.lambda_log_retention
@@ -79,7 +79,7 @@ locals {
 }
 
 module "api_lambdas" {
-  source   = "../../modules/lambda"
+  source   = "./modules/lambda"
   for_each = local.api_lambdas
 
   lambda_name   = each.key
@@ -112,7 +112,7 @@ locals {
 }
 
 module "api_gateway" {
-  source = "../../modules/api_gateway"
+  source = "./modules/api_gateway"
 
   api_name            = local.api_config.name
   api_description     = local.api_config.description
@@ -120,7 +120,7 @@ module "api_gateway" {
   api_ip_address_type = "dualstack"
 
   authorizers = local.api_authorizers
-  routes = local.api_routes
+  routes      = local.api_routes
 }
 
 resource "aws_lambda_permission" "api_gateway_invoke" {

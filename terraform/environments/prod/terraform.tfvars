@@ -1,6 +1,6 @@
 project_name                            = "crc"
 region                                  = "eu-central-1"
-environment                             = "Production"
+environment                             = "prod"
 frontend_repo                           = "oyiat/crc_frontend"
 backend_repo                            = "oyiat/crc_backend"
 infra_repo                              = "oyiat/crc_infra"
