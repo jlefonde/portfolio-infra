@@ -18,7 +18,7 @@ jobs:
     if: ${{ github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     env:
-      VAR_FILE: "environments/prod"
+      VAR_FILE: "environments/prod/terraform.tfvars"
       TFPLAN_BINARY: tfplan.binary
       TFPLAN_TXT: tfplan.txt
 
