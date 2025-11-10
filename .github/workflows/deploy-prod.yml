@@ -85,7 +85,7 @@ jobs:
           retention-days: 5
 
       - name: Create Plan Summary
-        if: success() || failure()
+        if: ${{ always() && steps.confirm.outcome != 'failure' }}
         run: |
           declare -gA outcomes=(
             ["success"]="✅"
@@ -131,7 +131,7 @@ jobs:
             echo "<summary>🔍 Click to view detailed plan</summary>" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo '```terraform' >> $GITHUB_STEP_SUMMARY
-            terraform show $TFPLAN_BINARY -no-color >> $GITHUB_STEP_SUMMARY
+            terraform show terraform/$TFPLAN_BINARY -no-color >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
             echo "</details>" >> $GITHUB_STEP_SUMMARY
           else
@@ -150,7 +150,6 @@ jobs:
           echo "- **Triggered by:** @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Branch:** \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Workflow:** [${{ github.workflow }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
-        working-directory: terraform/
 
   apply:
     name: Apply Production
@@ -296,4 +295,3 @@ jobs:
           echo "- **Triggered by:** @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Branch:** \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Workflow:** [${{ github.workflow }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
-        working-directory: terraform/
