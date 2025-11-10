@@ -236,6 +236,7 @@ jobs:
             -auto-approve \
             -no-color \
             -input=false
+        working-directory: terraform/
 
       - name: Create Apply Summary
         if: always()
