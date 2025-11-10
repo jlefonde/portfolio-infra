@@ -24,6 +24,7 @@ jobs:
 
     steps:
       - name: Validate Deploy Confirmation
+        id: confirm
         if: github.event.inputs.confirm != 'deploy'
         run: |
           echo "::error::Deployment confirmation required. Please type 'deploy' to proceed."
@@ -84,7 +85,7 @@ jobs:
           retention-days: 5
 
       - name: Create Plan Summary
-        if: always()
+        if: success() || failure()
         run: |
           declare -gA outcomes=(
             ["success"]="✅"
@@ -152,6 +153,8 @@ jobs:
         working-directory: terraform/
 
   apply:
+    name: Apply Production
+    if: ${{ github.ref == 'refs/heads/main' }}
     needs: plan
     runs-on: ubuntu-latest
     environment: prod
