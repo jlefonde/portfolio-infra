@@ -232,8 +232,9 @@ jobs:
         id: apply
         run: |
           terraform apply \
-            tfplan.binary \
+            ${{ env.TFPLAN_BINARY }} \
             -auto-approve \
+            -no-color \
             -input=false
 
       - name: Create Apply Summary
