@@ -66,14 +66,17 @@ jobs:
       - name: Plan Terraform
         id: plan
         run: |
+          set +e
           terraform plan \
             -var-file="$VAR_FILE" \
             -out="$TFPLAN_BINARY" \
             -detailed-exitcode \
             -no-color \
-            -input=false || true
+            -input=false
 
-          export TF_EXITCODE=$?
+          TF_EXITCODE=$?
+          set -e
+
           echo "exitcode=$TF_EXITCODE" >> $GITHUB_OUTPUT
           [[ $TF_EXITCODE -ne 1 ]] || exit 1
         working-directory: terraform/
@@ -188,6 +191,7 @@ jobs:
         id: drift
         run: |
           TFPLAN_DRIFT_CHECK="tfplan-drift-check"
+          set +e
           terraform plan \
             -var-file="$VAR_FILE" \
             -out="$TFPLAN_DRIFT_CHECK" \
@@ -195,7 +199,8 @@ jobs:
             -no-color \
             -input=false || true
 
-          export TF_EXITCODE=$?
+          TF_EXITCODE=$?
+          set -e
 
           if [[ $TF_EXITCODE -eq 0 ]]; then
             echo "✅ No drift detected"
