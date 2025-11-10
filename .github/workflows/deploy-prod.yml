@@ -17,6 +17,8 @@ jobs:
     name: Plan Production
     if: ${{ github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
+    outputs:
+      plan_exitcode: ${{ steps.plan.outputs.exitcode }}
     env:
       VAR_FILE: "environments/prod/terraform.tfvars"
       TFPLAN_BINARY: tfplan-${{ github.sha }}
@@ -131,7 +133,7 @@ jobs:
             echo "<summary>🔍 Click to view detailed plan</summary>" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo '```terraform' >> $GITHUB_STEP_SUMMARY
-            terraform show terraform/$TFPLAN_BINARY -no-color >> $GITHUB_STEP_SUMMARY
+            terraform show $TFPLAN_BINARY -no-color >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
             echo "</details>" >> $GITHUB_STEP_SUMMARY
           else
@@ -150,11 +152,12 @@ jobs:
           echo "- **Triggered by:** @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Branch:** \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Workflow:** [${{ github.workflow }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
+        working-directory: terraform/
 
   apply:
     name: Apply Production
-    if: ${{ github.ref == 'refs/heads/main' }}
     needs: plan
+    if: ${{ github.ref == 'refs/heads/main' && needs.plan.outputs.plan_exitcode == '2' }}
     runs-on: ubuntu-latest
     environment: prod
     steps:
