@@ -78,6 +78,8 @@ jobs:
           if [[ $TF_EXITCODE -eq 1 ]]; then
             exit 1
           fi
+
+          exit 0
         working-directory: terraform/
 
       - name: Upload Plan Artifact
