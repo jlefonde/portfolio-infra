@@ -12,6 +12,10 @@ permissions:
   id-token: write
   contents: read
 
+env:
+  VAR_FILE: "environments/prod/terraform.tfvars"
+  TFPLAN_BINARY: tfplan-${{ github.sha }}
+
 jobs:
   plan:
     name: Plan Production
@@ -19,10 +23,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       plan_exitcode: ${{ steps.plan.outputs.exitcode }}
-    env:
-      VAR_FILE: "environments/prod/terraform.tfvars"
-      TFPLAN_BINARY: tfplan-${{ github.sha }}
-      TFPLAN_TXT: tfplan.txt
 
     steps:
       - name: Validate Deploy Confirmation
