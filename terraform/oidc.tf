@@ -150,6 +150,33 @@ data "aws_iam_policy_document" "oidc_infra_tfstate" {
 
     resources = ["${data.aws_s3_bucket.tfstate.arn}/*"]
   }
+
+  statement {
+    sid    = "AllowTerraformStateLockDelete"
+    effect = "Allow"
+
+    actions = ["s3:DeleteObject"]
+
+    resources = ["${data.aws_s3_bucket.tfstate.arn}/terraform.tfstate.tflock"]
+  }
+
+  statement {
+    sid    = "AllowGetRandomPassword"
+    effect = "Allow"
+
+    actions = ["secretsmanager:GetRandomPassword"]
+
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "AllowSecretsManagerSecretAccess"
+    effect = "Allow"
+
+    actions = ["secretsmanager:GetSecretValue"]
+
+    resources = [module.secrets[local.origin_verify_secret_name].secret_arn]
+  }
 }
 
 resource "aws_iam_role_policy" "this" {
