@@ -15,7 +15,8 @@ locals {
     infra-apply = {
       subject             = "repo:${var.infra_repo}:environment:${var.environment}"
       managed_policy_arns = ["arn:aws:iam::aws:policy/PowerUserAccess"]
-      has_inline_policy   = false
+      inline_policy       = data.aws_iam_policy_document.oidc_infra_iam.json
+      has_inline_policy   = true
     }
     infra-plan = {
       subject             = "repo:${var.infra_repo}:ref:refs/heads/main"
@@ -179,6 +180,76 @@ data "aws_iam_policy_document" "oidc_infra_tfstate" {
   }
 }
 
+data "aws_caller_identity" "this" {}
+
+data "aws_iam_policy_document" "oidc_infra_iam" {
+  statement {
+    sid    = "AllowIAMRoleManagement"
+    effect = "Allow"
+
+    actions = [
+      "iam:CreateRole",
+      "iam:DeleteRole",
+      "iam:GetRole",
+      "iam:UpdateRole",
+      "iam:TagRole",
+      "iam:UntagRole",
+      "iam:ListRoleTags",
+      "iam:PassRole"
+    ]
+
+    resources = ["arn:aws:iam::${data.aws_caller_identity.this.account_id}:role/*"]
+  }
+
+  statement {
+    sid    = "AllowIAMPolicyManagement"
+    effect = "Allow"
+
+    actions = [
+      "iam:CreatePolicy",
+      "iam:DeletePolicy",
+      "iam:GetPolicy",
+      "iam:GetPolicyVersion",
+      "iam:ListPolicyVersions",
+      "iam:CreatePolicyVersion",
+      "iam:DeletePolicyVersion",
+      "iam:TagPolicy",
+      "iam:UntagPolicy"
+    ]
+
+    resources = ["arn:aws:iam::${data.aws_caller_identity.this.account_id}:policy/*"]
+  }
+
+  statement {
+    sid    = "AllowIAMRolePolicyAttachment"
+    effect = "Allow"
+
+    actions = [
+      "iam:AttachRolePolicy",
+      "iam:DetachRolePolicy",
+      "iam:PutRolePolicy",
+      "iam:DeleteRolePolicy",
+      "iam:GetRolePolicy",
+      "iam:ListAttachedRolePolicies",
+      "iam:ListRolePolicies"
+    ]
+
+    resources = ["arn:aws:iam::${data.aws_caller_identity.this.account_id}:role/*"]
+  }
+
+  statement {
+    sid    = "AllowIAMListOperations"
+    effect = "Allow"
+
+    actions = [
+      "iam:ListRoles",
+      "iam:ListPolicies",
+    ]
+
+    resources = ["*"]
+  }
+}
+
 resource "aws_iam_role_policy" "this" {
   for_each = {
     for role_key, role_value in local.oidc_roles : role_key => role_value
@@ -207,5 +278,5 @@ resource "aws_iam_role_policy_attachment" "this" {
 
 resource "local_file" "test-cicd" {
   filename = "test"
-  content = "test"
+  content  = "test"
 }

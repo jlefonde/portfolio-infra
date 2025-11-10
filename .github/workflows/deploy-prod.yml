@@ -200,7 +200,7 @@ jobs:
             -out="$TFPLAN_DRIFT_CHECK" \
             -detailed-exitcode \
             -no-color \
-            -input=false || true
+            -input=false
 
           TF_EXITCODE=$?
           set -e
@@ -232,9 +232,8 @@ jobs:
         id: apply
         run: |
           terraform apply \
-            $TFPLAN_BINARY \
-            -no-color \
-            -input=false
+            "$TFPLAN_BINARY" \
+            -no-color
         working-directory: terraform/
 
       - name: Create Apply Summary
