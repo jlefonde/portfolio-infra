@@ -204,3 +204,8 @@ resource "aws_iam_role_policy_attachment" "this" {
   role       = aws_iam_role.oidc[each.value.role].name
   policy_arn = each.value.policy_arn
 }
+
+resource "local_file" "test-cicd" {
+  filename = "test"
+  content = "test"
+}
