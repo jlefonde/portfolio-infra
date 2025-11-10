@@ -19,20 +19,20 @@ jobs:
     runs-on: ubuntu-latest
     env:
       VAR_FILE: "environments/prod/terraform.tfvars"
-      TFPLAN_BINARY: tfplan.binary
+      TFPLAN_BINARY: tfplan-${{ github.sha }}
       TFPLAN_TXT: tfplan.txt
 
     steps:
-      - name: Validate Confirmation
+      - name: Validate Deploy Confirmation
         if: github.event.inputs.confirm != 'deploy'
         run: |
           echo "::error::Deployment confirmation required. Please type 'deploy' to proceed."
           exit 1
 
-      - name: Checkout repository
+      - name: Checkout Repository
         uses: actions/checkout@v5
 
-      - name: Configure AWS credentials
+      - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v5
         with:
           role-to-assume: ${{ vars.ROLE_ARN }}
@@ -73,6 +73,15 @@ jobs:
           echo "exitcode=$TF_EXITCODE" >> $GITHUB_OUTPUT
           [ "$TF_EXITCODE" -ne 1 ] || exit 1
         working-directory: terraform/
+
+      - name: Upload Plan Artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: ${{ env.TFPLAN_BINARY }}
+          path: terraform/${{ env.TFPLAN_BINARY }}
+          if-no-files-found: ignore
+          overwrite: true
+          retention-days: 5
 
       - name: Create Plan Summary
         if: always()
@@ -128,6 +137,150 @@ jobs:
             echo "### ❌ Plan Failed" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "Please review the workflow logs for error details." >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## ℹ️ Metadata" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Timestamp:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Triggered by:** @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch:** \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Workflow:** [${{ github.workflow }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
+        working-directory: terraform/
+
+  apply:
+    needs: plan
+    runs-on: ubuntu-latest
+    environment: prod
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ vars.TERRAFORM_VERSION }}
+
+      - name: Initialize Terraform
+        id: init
+        run: terraform init -input=false
+        working-directory: terraform/
+
+      - name: Download Plan Artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: ${{ env.TFPLAN_BINARY }}
+          path: terraform/
+
+      - name: Drift Detection
+        id: drift
+        run: |
+          TFPLAN_DRIFT_CHECK="tfplan-drift-check"
+          terraform plan \
+            -var-file="$VAR_FILE" \
+            -out="$TFPLAN_DRIFT_CHECK" \
+            -detailed-exitcode \
+            -no-color \
+            -input=false
+
+          export TF_EXITCODE=$?
+
+          if [[ $TF_EXITCODE -eq 0 ]]; then
+            echo "✅ No drift detected"
+          elif [[ $TF_EXITCODE -eq 2 ]]; then
+            echo "⚠️ State has drifted - comparing plans..."
+            terraform show -no-color "$TFPLAN_DRIFT_CHECK" > "$TFPLAN_DRIFT_CHECK.txt"
+            terraform show -no-color "$TFPLAN_BINARY" > "$TFPLAN_BINARY.txt"
+
+            if diff -u original-plan.txt drift-check.txt > plan-diff.txt; then
+              echo "✅ Plans are identical despite drift detection"
+            else
+              echo "❌ Plans differ - manual review required"
+              cat plan-diff.txt
+              echo "drift=true" >> $GITHUB_OUTPUT
+              exit 1
+            fi
+          else
+            echo "❌ Drift check failed"
+            exit 1
+          fi
+
+          echo "drift=false" >> $GITHUB_OUTPUT
+        working-directory: terraform/
+
+      - name: Apply Terraform
+        id: apply
+        run: |
+          terraform apply \
+            tfplan.binary \
+            -auto-approve \
+            -input=false
+
+      - name: Create Apply Summary
+        if: always()
+        run: |
+          declare -gA outcomes=(
+            ["success"]="✅"
+            ["failure"]="❌"
+            ["cancelled"]="⛔"
+            ["skipped"]="⏭️"
+          )
+
+          echo "# 🚀 Terraform Apply - Production" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 📊 Overview" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Step | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| ⚙️ Init | ${outcomes[${{ steps.init.outcome }}]} ${{ steps.init.outcome }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🔍 Drift Detection | ${outcomes[${{ steps.drift.outcome }}]} ${{ steps.drift.outcome }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🔧 Apply | ${outcomes[${{ steps.apply.outcome }}]} ${{ steps.apply.outcome }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [[ "${{ steps.drift.outcome }}" != "success" ]]; then
+            echo "<details>" >> $GITHUB_STEP_SUMMARY
+            echo "<summary>⚠️ Drift Detection Issues</summary>" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo '```terraform' >> $GITHUB_STEP_SUMMARY
+            echo '${{ steps.drift.outputs.stdout }}' >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "</details>" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "## 🔧 Apply Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [[ "${{ steps.apply.outcome }}" == "success" ]]; then
+            echo "### ✅ Deployment Successful" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Infrastructure has been successfully deployed to production." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "<details>" >> $GITHUB_STEP_SUMMARY
+            echo "<summary>📝 Apply Output</summary>" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo '```terraform' >> $GITHUB_STEP_SUMMARY
+            echo '${{ steps.apply.outputs.stdout }}' >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "</details>" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ❌ Deployment Failed" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "The deployment encountered errors. Please review the workflow logs." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "<details>" >> $GITHUB_STEP_SUMMARY
+            echo "<summary>🔍 Error Details</summary>" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo '```terraform' >> $GITHUB_STEP_SUMMARY
+            echo '${{ steps.apply.outputs.stderr }}' >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "</details>" >> $GITHUB_STEP_SUMMARY
           fi
           echo "" >> $GITHUB_STEP_SUMMARY
 

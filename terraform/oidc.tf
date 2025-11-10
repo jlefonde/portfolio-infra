@@ -12,15 +12,16 @@ locals {
       inline_policy       = data.aws_iam_policy_document.oidc_backend.json
       has_inline_policy   = true
     }
-    infra = {
+    infra-apply = {
       subject             = "repo:${var.infra_repo}:environment:${var.environment}"
       managed_policy_arns = ["arn:aws:iam::aws:policy/PowerUserAccess"]
       has_inline_policy   = false
     }
-    infra-read-only = {
+    infra-plan = {
       subject             = "repo:${var.infra_repo}:ref:refs/heads/main"
       managed_policy_arns = ["arn:aws:iam::aws:policy/ReadOnlyAccess"]
-      has_inline_policy   = false
+      inline_policy       = data.aws_iam_policy_document.oidc_infra_tfstate.json
+      has_inline_policy   = true
     }
   }
 }
@@ -130,6 +131,24 @@ data "aws_iam_policy_document" "oidc_backend" {
     resources = [
       aws_ssm_parameter.backend_bucket_name.arn
     ]
+  }
+}
+
+data "aws_s3_bucket" "tfstate" {
+  bucket = "crc-tfstate"
+}
+
+data "aws_iam_policy_document" "oidc_infra_tfstate" {
+  statement {
+    sid    = "AllowTerraformStateAccess"
+    effect = "Allow"
+
+    actions = [
+      "s3:GetObject",
+      "s3:PutObject"
+    ]
+
+    resources = ["${data.aws_s3_bucket.tfstate.arn}/*"]
   }
 }
 
