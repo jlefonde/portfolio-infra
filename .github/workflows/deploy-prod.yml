@@ -112,9 +112,24 @@ jobs:
           echo "📋 Plan | ${outcomes[${{ steps.plan.outcome }}]} ${{ steps.plan.outcome }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          if [[ "${{ steps.validate.outcome }}" != "success" ]]; then
+          if [[ "${{ steps.init.outcome }}" != "success" ]]; then
+            echo "## ⚙️ Init" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
             echo "<details>" >> $GITHUB_STEP_SUMMARY
-            echo "<summary>🔍 Click to view detailed validation</summary>" >> $GITHUB_STEP_SUMMARY
+            echo "<summary>🔍 Click to view detailed init</summary>" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo '```terraform' >> $GITHUB_STEP_SUMMARY
+            echo '${{ steps.init.outputs.stdout }}' >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "</details>" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [[ "${{ steps.validate.outcome }}" != "success" ]]; then
+            echo "## 🛡️ Validate" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "<details>" >> $GITHUB_STEP_SUMMARY
+            echo "<summary>🔍 Click to view detailed validate</summary>" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo '```terraform' >> $GITHUB_STEP_SUMMARY
             echo '${{ steps.validate.outputs.stdout }}' >> $GITHUB_STEP_SUMMARY
@@ -123,9 +138,8 @@ jobs:
             echo "" >> $GITHUB_STEP_SUMMARY
           fi
 
-          echo "## 📋 Plan Results" >> $GITHUB_STEP_SUMMARY
+          echo "## 📋 Plan" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-
           if [[ "${{ steps.plan.outputs.exitcode }}" == "0" ]]; then
             echo "### ✅ No Changes Detected" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
@@ -257,9 +271,24 @@ jobs:
           echo "| 🔧 Apply | ${outcomes[${{ steps.apply.outcome }}]} ${{ steps.apply.outcome }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          if [[ "${{ steps.drift.outcome }}" != "success" ]]; then
+          if [[ "${{ steps.init.outcome }}" != "success" ]]; then
+            echo "## ⚙️ Init" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
             echo "<details>" >> $GITHUB_STEP_SUMMARY
-            echo "<summary>⚠️ Drift Detection Issues</summary>" >> $GITHUB_STEP_SUMMARY
+            echo "<summary>🔍 Click to view detailed init</summary>" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo '```terraform' >> $GITHUB_STEP_SUMMARY
+            echo '${{ steps.init.outputs.stdout }}' >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "</details>" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [[ "${{ steps.drift.outcome }}" != "success" ]]; then
+            echo "## 🔍 Drift Detection" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "<details>" >> $GITHUB_STEP_SUMMARY
+            echo "<summary>🔍 Click to view detailed drift detection</summary>" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo '```terraform' >> $GITHUB_STEP_SUMMARY
             echo '${{ steps.drift.outputs.stdout }}' >> $GITHUB_STEP_SUMMARY
@@ -268,16 +297,13 @@ jobs:
             echo "" >> $GITHUB_STEP_SUMMARY
           fi
 
-          echo "## 🔧 Apply Results" >> $GITHUB_STEP_SUMMARY
+          echo "## 🔧 Apply" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-
           if [[ "${{ steps.apply.outcome }}" == "success" ]]; then
             echo "### ✅ Deployment Successful" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "Infrastructure has been successfully deployed to production." >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
             echo "<details>" >> $GITHUB_STEP_SUMMARY
-            echo "<summary>📝 Apply Output</summary>" >> $GITHUB_STEP_SUMMARY
+            echo "<summary>🔍 Click to view detailed apply</summary>" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo '```terraform' >> $GITHUB_STEP_SUMMARY
             echo '${{ steps.apply.outputs.stdout }}' >> $GITHUB_STEP_SUMMARY
@@ -285,8 +311,6 @@ jobs:
             echo "</details>" >> $GITHUB_STEP_SUMMARY
           else
             echo "### ❌ Deployment Failed" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "The deployment encountered errors. Please review the workflow logs." >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "<details>" >> $GITHUB_STEP_SUMMARY
             echo "<summary>🔍 Error Details</summary>" >> $GITHUB_STEP_SUMMARY
