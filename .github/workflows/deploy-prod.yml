@@ -233,6 +233,7 @@ jobs:
         run: |
           terraform apply \
             $TFPLAN_BINARY \
+            -var-file="$VAR_FILE" \
             -auto-approve \
             -no-color \
             -input=false
