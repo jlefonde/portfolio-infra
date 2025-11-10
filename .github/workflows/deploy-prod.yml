@@ -232,7 +232,7 @@ jobs:
         id: apply
         run: |
           terraform apply \
-            ${{ env.TFPLAN_BINARY }} \
+            $TFPLAN_BINARY \
             -auto-approve \
             -no-color \
             -input=false
