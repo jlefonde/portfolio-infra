@@ -238,12 +238,22 @@ data "aws_iam_policy_document" "oidc_infra_iam" {
   }
 
   statement {
+    sid    = "AllowIAMOIDCProvider"
+    effect = "Allow"
+
+    actions = ["iam:GetOpenIDConnectProvider"]
+
+    resources = ["arn:aws:iam::${data.aws_caller_identity.this.account_id}:oidc-provider/*"]
+  }
+
+  statement {
     sid    = "AllowIAMListOperations"
     effect = "Allow"
 
     actions = [
       "iam:ListRoles",
       "iam:ListPolicies",
+      "iam:ListOpenIDConnectProviders"
     ]
 
     resources = ["*"]
