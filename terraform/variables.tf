@@ -58,6 +58,11 @@ variable "origin_verify_rotation" {
   type        = number
 }
 
+variable "lambda_build_dir" {
+  description = "The path to the lambda build directory"
+  type        = string
+}
+
 variable "lambda_log_retention" {
   description = "Number of days to retain log events for lambda"
   type        = number

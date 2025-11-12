@@ -3,7 +3,7 @@ locals {
     visitor-count = {
       handler       = "bootstrap"
       runtime       = "provided.al2"
-      source_dir    = "${path.root}/../lambda/bootstrap"
+      source_dir    = "${var.lambda_build_dir}/bootstrap"
       use_s3        = true
       s3_bucket     = aws_s3_bucket.backend.bucket
       s3_key        = "bootstrap/bootstrap.zip"
@@ -23,7 +23,7 @@ locals {
     origin-verify-authorizer = {
       handler       = "bootstrap"
       runtime       = "provided.al2"
-      source_dir    = "${path.root}/../lambda/api_authorizer"
+      source_dir    = "${var.lambda_build_dir}/api_authorizer"
       publish       = true
       enable_log    = true
       log_retention = var.lambda_log_retention

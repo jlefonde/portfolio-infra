@@ -26,7 +26,7 @@ locals {
     rotate-origin-verify = {
       handler       = "bootstrap"
       runtime       = "provided.al2"
-      source_dir    = "${path.root}/../lambda/rotate_secret/bin/rotate_origin_verify"
+      source_dir    = "${var.lambda_build_dir}/rotate_origin_verify"
       publish       = true
       enable_log    = true
       log_retention = var.lambda_log_retention
