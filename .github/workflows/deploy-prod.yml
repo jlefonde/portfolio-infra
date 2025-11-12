@@ -65,6 +65,7 @@ jobs:
         run: terraform validate -no-color
 
       - name: Build Lambda Functions
+        id: build
         run: |
           echo "🔍 Searching for Lambda functions..."
           lambda_dirs=$(find ./lambda/ -name "main.go" -printf '%h\n' | sort -u)
@@ -154,10 +155,11 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Step | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "⚙️ Init | ${outcomes[${{ steps.init.outcome }}]} ${{ steps.init.outcome }}" >> $GITHUB_STEP_SUMMARY
-          echo "📝 Format | ${outcomes[${{ steps.fmt.outcome }}]} ${{ steps.fmt.outcome }}" >> $GITHUB_STEP_SUMMARY
-          echo "🛡️ Validate | ${outcomes[${{ steps.validate.outcome }}]} ${{ steps.validate.outcome }}" >> $GITHUB_STEP_SUMMARY
-          echo "📋 Plan | ${outcomes[${{ steps.plan.outcome }}]} ${{ steps.plan.outcome }}" >> $GITHUB_STEP_SUMMARY
+          echo "| ⚙️ Init | ${outcomes[${{ steps.init.outcome }}]} ${{ steps.init.outcome }}" >> $GITHUB_STEP_SUMMARY
+          echo "| 📝 Format | ${outcomes[${{ steps.fmt.outcome }}]} ${{ steps.fmt.outcome }}" >> $GITHUB_STEP_SUMMARY
+          echo "| 🛡️ Validate | ${outcomes[${{ steps.validate.outcome }}]} ${{ steps.validate.outcome }}" >> $GITHUB_STEP_SUMMARY
+          echo "| 🔨 Build | ${outcomes[${{ steps.build.outcome }}]} ${{ steps.build.outcome }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 📋 Plan | ${outcomes[${{ steps.plan.outcome }}]} ${{ steps.plan.outcome }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
           if [[ "${{ steps.init.outcome }}" != "success" ]]; then
@@ -181,6 +183,19 @@ jobs:
             echo "" >> $GITHUB_STEP_SUMMARY
             echo '```terraform' >> $GITHUB_STEP_SUMMARY
             echo '${{ steps.validate.outputs.stdout }}' >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "</details>" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [[ "${{ steps.build.outcome }}" != "success" ]]; then
+            echo "## 🛡️ Build" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "<details>" >> $GITHUB_STEP_SUMMARY
+            echo "<summary>🔍 Click to view detailed build</summary>" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo '```terraform' >> $GITHUB_STEP_SUMMARY
+            echo '${{ steps.build.outputs.stdout }}' >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
             echo "</details>" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
