@@ -73,7 +73,7 @@ resource "aws_lambda_function" "lambda" {
   publish       = var.lambda_config.publish
 
   filename         = !var.lambda_config.use_s3 ? var.lambda_config.source_file : null
-  source_code_hash = !var.lambda_config.use_s3 ? filebase64sha256(var.lambda_config.source_file) : null
+  source_code_hash = !var.lambda_config.use_s3 ? filebase64sha256(var.lambda_config.source_file) : aws_s3_object.lambda[0].source_hash
   s3_key           = var.lambda_config.use_s3 ? aws_s3_object.lambda[0].key : null
   s3_bucket        = var.lambda_config.use_s3 ? var.lambda_config.s3_bucket : null
 
@@ -85,7 +85,4 @@ resource "aws_lambda_function" "lambda" {
   }
 
   depends_on = [aws_s3_object.lambda]
-  lifecycle {
-    ignore_changes = [s3_key]
-  }
 }
