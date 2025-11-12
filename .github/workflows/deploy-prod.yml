@@ -68,7 +68,7 @@ jobs:
         run: |
           echo "Searching for Lambda functions..."
           lambda_dirs=$(find ./lambda/ -name "main.go" -printf '%h\n' | sort -u)
-          
+
           lambda_count=$(echo "$lambda_dirs" | wc -l)
           echo "Found $lambda_count Lambda function(s) to build"
           echo ""
@@ -81,22 +81,23 @@ jobs:
             func_name=$(basename "$dir")
 
             echo "Building lambda function: $func_name"
-            echo "  Source: $dir"
-            echo "  Target: ${{ env.TF_VAR_lambda_build_dir }}/$func_name.zip"
+            echo "  - Source: $dir"
+            echo "  - Target: ${{ env.TF_VAR_lambda_build_dir }}/$func_name.zip"
 
             cd "$dir"
 
             output_binary="${{ env.TF_VAR_lambda_build_dir }}/bootstrap"
             if GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -o "$output_binary" main.go; then
                 binary_size=$(stat -c%s "$output_binary" | numfmt --to=iec-i --suffix=B)
-                # Create deterministic zip with fixed timestamp and no extra metadata
+                
                 TZ=UTC touch -t 202001010000.00 "$output_binary"
                 zip -X -j "${{ env.TF_VAR_lambda_build_dir }}/$func_name.zip" "$output_binary"
                 TZ=UTC touch -t 202001010000.00 "${{ env.TF_VAR_lambda_build_dir }}/$func_name.zip"
+
                 rm "$output_binary"
-                echo "[SUCCESS] Build successful (size: $binary_size)"
+                echo "Build successful (size: $binary_size)"
             else
-                echo "[ERROR] Build failed"
+                echo "Error: Build failed"
                 exit 1
             fi
             
@@ -104,7 +105,7 @@ jobs:
             echo ""
           done
 
-          echo "[SUCCESS] All Lambda functions compiled successfully"
+          echo "All Lambda functions compiled successfully"
           echo ""
 
       - name: Upload Lambda Build Artifacts
@@ -250,28 +251,30 @@ jobs:
           set -e
 
           if [[ $TF_EXITCODE -eq 0 ]]; then
-            echo "[SUCCESS] No drift detected - infrastructure matches expected state"
+            echo "No drift detected - infrastructure matches expected state"
           elif [[ $TF_EXITCODE -eq 2 ]]; then
-            echo "[WARNING] State has drifted - comparing plans..."
+            echo "Warning: State has drifted - comparing plans...""
+            
             terraform show -no-color "$TFPLAN_DRIFT_CHECK" > drift-check.txt
             terraform show -no-color "$TFPLAN_BINARY" > original-plan.txt
 
-            if diff -u original-plan.txt drift-check.txt > plan-diff.txt; then
-              echo "[SUCCESS] Plans are identical - no actual drift detected"
+            grep -A 1000 "Terraform will perform the following actions:" original-plan.txt
+            grep -A 1000 "Terraform will perform the following actions:" drift-check.txt
+
+            if diff -u original-changes.txt drift-changes.txt > plan-diff.txt; then
+              echo "Plans are identical"
             else
-              echo "[WARNING] Plans differ - showing differences..."
+              echo "Warning: Plans differ - showing differences..."
+              echo ""
               echo "=== Plan Differences ==="
               cat plan-diff.txt
-              echo ""
-              echo "[INFO] Proceeding with original plan despite differences"
-              echo "[INFO] This may be due to timing differences or resource updates"
+
+              exit 1
             fi
           else
-            echo "[ERROR] Drift check failed with unexpected exit code: $TF_EXITCODE"
+            echo "Error: Drift check failed"
             exit 1
           fi
-
-          echo "drift=false" >> $GITHUB_OUTPUT
         working-directory: terraform/
 
       - name: Apply Terraform
