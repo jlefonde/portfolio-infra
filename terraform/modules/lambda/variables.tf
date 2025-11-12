@@ -8,7 +8,7 @@ variable "lambda_config" {
   type = object({
     handler       = string
     runtime       = string
-    source_dir    = string
+    source_file   = string
     environment   = optional(map(string), {})
     publish       = optional(bool, false)
     use_s3        = optional(bool, false)

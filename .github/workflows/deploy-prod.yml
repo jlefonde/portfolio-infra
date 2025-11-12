@@ -82,18 +82,19 @@ jobs:
             func_name=$(basename "$dir")
 
             echo "Building lambda function: $func_name"
-            echo "   Source: $dir"
-            echo "   Target: ${{ env.TF_VAR_lambda_build_dir }}/$func_name/bootstrap"
+            echo "  Source: $dir"
+            echo "  Target: ${{ env.TF_VAR_lambda_build_dir }}/$func_name.zip"
 
             cd "$dir"
-            mkdir -p "${{ env.TF_VAR_lambda_build_dir }}/$func_name"
-            
-            echo "   Compiling with GOOS=linux GOARCH=amd64..."
-            if GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o "${{ env.TF_VAR_lambda_build_dir }}/$func_name/bootstrap" main.go; then
-                binary_size=$(stat -c%s "${{ env.TF_VAR_lambda_build_dir }}/$func_name/bootstrap" | numfmt --to=iec-i --suffix=B)
-                echo "   [SUCCESS] Build successful (size: $binary_size)"
+
+            output_binary="${{ env.TF_VAR_lambda_build_dir }}/bootstrap"
+            if GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o "$output_binary" main.go; then
+                binary_size=$(stat -c%s "$output_binary" | numfmt --to=iec-i --suffix=B)
+                zip -j "${{ env.TF_VAR_lambda_build_dir }}/$func_name.zip" "$output_binary"
+                rm "$output_binary"
+                echo "[SUCCESS] Build successful (size: $binary_size)"
             else
-                echo "   [ERROR] Build failed"
+                echo "[ERROR] Build failed"
                 exit 1
             fi
             

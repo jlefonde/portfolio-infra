@@ -58,19 +58,13 @@ resource "aws_iam_role_policy" "lambda" {
   policy = data.aws_iam_policy_document.lambda.json
 }
 
-data "archive_file" "lambda" {
-  type        = "zip"
-  source_file = "${var.lambda_config.source_dir}/bootstrap"
-  output_path = "${var.lambda_config.source_dir}/${var.lambda_name}.zip"
-}
-
 resource "aws_s3_object" "lambda" {
   count = var.lambda_config.use_s3 ? 1 : 0
 
   bucket      = var.lambda_config.s3_bucket
-  key         = "bootstrap/bootstrap.zip"
-  source      = data.archive_file.lambda.output_path
-  source_hash = data.archive_file.lambda.output_base64sha256
+  key         = var.lambda_config.s3_key
+  source      = var.lambda_config.source_file
+  source_hash = filebase64sha256(var.lambda_config.source_file)
 }
 
 resource "aws_lambda_function" "lambda" {
@@ -78,8 +72,8 @@ resource "aws_lambda_function" "lambda" {
   role          = aws_iam_role.lambda.arn
   publish       = var.lambda_config.publish
 
-  filename         = !var.lambda_config.use_s3 ? data.archive_file.lambda.output_path : null
-  source_code_hash = !var.lambda_config.use_s3 ? data.archive_file.lambda.output_base64sha256 : null
+  filename         = !var.lambda_config.use_s3 ? var.lambda_config.source_file : null
+  source_code_hash = !var.lambda_config.use_s3 ? filebase64sha256(var.lambda_config.source_file) : null
   s3_key           = var.lambda_config.use_s3 ? aws_s3_object.lambda[0].key : null
   s3_bucket        = var.lambda_config.use_s3 ? var.lambda_config.s3_bucket : null
 
