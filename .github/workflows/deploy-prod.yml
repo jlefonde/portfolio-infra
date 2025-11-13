@@ -198,6 +198,15 @@ jobs:
           echo "- **Workflow:** [${{ github.workflow }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
         working-directory: terraform/
 
+      - name: Post text to a Slack channel
+        uses: slackapi/slack-github-action@v2.1.1
+        with:
+          method: chat.postMessage
+          token: ${{ secrets.SLACK_BOT_TOKEN }}
+          payload: |
+            channel: ${{ vars.SLACK_CHANNEL_ID }}
+            text: "howdy <!channel>!\n${{ job.status }}"
+
   apply:
     needs: plan
     if: ${{ github.ref == 'refs/heads/main' && needs.plan.outputs.plan_exitcode == '2' }}
