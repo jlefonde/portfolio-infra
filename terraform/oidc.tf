@@ -288,4 +288,5 @@ resource "aws_iam_role_policy_attachment" "this" {
 
 resource "local_file" "test" {
   filename = "test"
+  content = "test"
 }
