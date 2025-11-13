@@ -207,7 +207,10 @@ jobs:
           payload: |
             {
               "channel": "${{ vars.SLACK_CHANNEL_ID }}",
-              "text": "📋 Terraform Plan - Production: ${{ job.status == 'success' && '✅ Succeeded' || '❌ Failed' }}\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Details>"
+              "text": "📋 Terraform Plan - Production: ${{ job.status == 'success' && '✅ Succeeded' || '❌ Failed' }}\n
+                ${{ steps.plan.outputs.exitcode == '0' && '• ✅ No changes detected - apply skipped' 
+                  || steps.plan.outputs.exitcode == '2' && '• ⚠️ Changes detected - review required'}}\n
+                <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Details>"
             }
 
   apply:
