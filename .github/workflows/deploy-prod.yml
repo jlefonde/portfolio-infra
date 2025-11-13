@@ -207,6 +207,7 @@ jobs:
           payload: |
             {
               "channel": "${{ vars.SLACK_CHANNEL_ID }}",
+              "text": "${{ job.status == 'success' && steps.plan.outputs.exitcode == '0' && 'Terraform Plan - Production: No Changes Detected' || job.status == 'success' && steps.plan.outputs.exitcode == '2' && 'Terraform Plan - Production: Changes Detected' || 'Terraform Plan - Production: Failed' }}",
               "blocks": [
                 {
                   "type": "header",
@@ -246,18 +247,7 @@ jobs:
                         "text": "View Details"
                       },
                       "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-                    }${{
-                      steps.plan.outputs.exitcode == '2' && format(',
-                    {{
-                      "type": "button",
-                      "text": {{
-                        "type": "plain_text",
-                        "text": "Review & Approve"
-                      }},
-                      "style": "primary",
-                      "url": "{0}/{1}/actions/runs/{2}"
-                    }}', github.server_url, github.repository, github.run_id) || ''
-                    }}
+                    }
                   ]
                 }
               ]
@@ -318,7 +308,7 @@ jobs:
           if [[ $TF_EXITCODE -eq 0 ]]; then
             echo "No drift detected - infrastructure matches expected state"
           elif [[ $TF_EXITCODE -eq 2 ]]; then
-            echo "Warning: State has drifted - comparing plans...""
+            echo "Warning: State has drifted - comparing plans..."
             
             terraform show -no-color "$TFPLAN_DRIFT_CHECK" > drift-check.txt
             terraform show -no-color "$TFPLAN_BINARY" > original-plan.txt
@@ -413,6 +403,7 @@ jobs:
           payload: |
             {
               "channel": "${{ vars.SLACK_CHANNEL_ID }}",
+              "text": "${{ job.status == 'success' && 'Terraform Apply - Production: Successful' || 'Terraform Apply - Production: Failed' }}",
               "blocks": [
                 {
                   "type": "header",
