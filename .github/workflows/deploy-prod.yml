@@ -207,10 +207,60 @@ jobs:
           payload: |
             {
               "channel": "${{ vars.SLACK_CHANNEL_ID }}",
-              "text": "📋 Terraform Plan - Production: ${{ job.status == 'success' && '✅ Succeeded' || '❌ Failed' }}\n
-                ${{ steps.plan.outputs.exitcode == '0' && '• ✅ No changes detected - apply skipped' 
-                  || steps.plan.outputs.exitcode == '2' && '• ⚠️ Changes detected - review required'}}\n
-                <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Details>"
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": {
+                    "type": "plain_text",
+                    "text": "${{ steps.plan.outputs.exitcode == '0' && '📋 Terraform Plan - Production: ✅ No Changes' || steps.plan.outputs.exitcode == '2' && '📋 Terraform Plan - Production: ⚠️ Changes Detected' || '📋 Terraform Plan - Production: ❌ Failed' }}"
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Environment:*\nProduction"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Triggered by:*\n${{ github.actor }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Branch:*\n${{ github.ref_name }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Commit:*\n<${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|`${{ github.sha }}`>"
+                    }
+                  ]
+                },
+                {
+                  "type": "actions",
+                  "elements": [
+                    {
+                      "type": "button",
+                      "text": {
+                        "type": "plain_text",
+                        "text": "View Details"
+                      },
+                      "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                    }${{
+                      steps.plan.outputs.exitcode == '2' && format(',
+                    {{
+                      "type": "button",
+                      "text": {{
+                        "type": "plain_text",
+                        "text": "Review & Approve"
+                      }},
+                      "style": "primary",
+                      "url": "{0}/{1}/actions/runs/{2}"
+                    }}', github.server_url, github.repository, github.run_id) || ''
+                    }}
+                  ]
+                }
+              ]
             }
 
   apply:
@@ -354,7 +404,7 @@ jobs:
           echo "- **Branch:** \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Workflow:** [${{ github.workflow }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
 
-      - name: Post to Slack
+      - name: Post Slack Message
         if: always()
         uses: slackapi/slack-github-action@v2.1.1
         with:
@@ -363,5 +413,47 @@ jobs:
           payload: |
             {
               "channel": "${{ vars.SLACK_CHANNEL_ID }}",
-              "text": "Production Deploy ${{ job.status == 'success' && '✅ Succeeded' || '❌ Failed' }}\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Details>"
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": {
+                    "type": "plain_text",
+                    "text": "${{ job.status == 'success' && '🚀 Terraform Apply - Production: ✅ Successful' || '🚀 Terraform Apply - Production: ❌ Failed' }}"
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Environment:*\nProduction"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Deployed by:*\n${{ github.actor }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Branch:*\n${{ github.ref_name }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Commit:*\n<${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|`${{ github.sha }}`>"
+                    }
+                  ]
+                },
+                {
+                  "type": "actions",
+                  "elements": [
+                    {
+                      "type": "button",
+                      "text": {
+                        "type": "plain_text",
+                        "text": "View Details"
+                      },
+                      "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                    }
+                  ]
+                }
+              ]
             }
