@@ -153,8 +153,6 @@ jobs:
             ["skipped"]="⏭️"
           )
 
-          echo "# 📋 Terraform Plan - Production" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
           echo "## 📊 Overview" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Step | Status |" >> $GITHUB_STEP_SUMMARY
@@ -206,19 +204,23 @@ jobs:
           token: ${{ secrets.SLACK_BOT_TOKEN }}
           payload: |
             {
-              "channel": "${{ vars.SLACK_CHANNEL_ID }}",
-              "text": "${{ job.status == 'success' && steps.plan.outputs.exitcode == '0' && 'Terraform Plan - Production: No Changes Detected' || job.status == 'success' && steps.plan.outputs.exitcode == '2' && 'Terraform Plan - Production: Changes Detected' || 'Terraform Plan - Production: Failed' }}",
+              "channel": "${{ vars.SLACK_CHANNEL_ID_PROD }}",
+              "text": "${{ job.status == 'success' && steps.plan.outputs.exitcode == '0' && 'Terraform Plan - Infrastructure (Production): No Changes Detected' || job.status == 'success' && steps.plan.outputs.exitcode == '2' && 'Terraform Plan - Infrastructure (Production): Changes Detected' || 'Terraform Plan - Infrastructure (Production): Failed' }}",
               "blocks": [
                 {
                   "type": "header",
                   "text": {
                     "type": "plain_text",
-                    "text": "${{ job.status == 'success' && steps.plan.outputs.exitcode == '0' && '📋 Terraform Plan - Production: ✅ No Changes Detected' || job.status == 'success' && steps.plan.outputs.exitcode == '2' && '📋 Terraform Plan - Production: ⚠️ Changes Detected' || '📋 Terraform Plan - Production: ❌ Failed' }}"
+                    "text": "${{ job.status == 'success' && steps.plan.outputs.exitcode == '0' && '📋 Terraform Plan - Infrastructure: ✅ No Changes' || job.status == 'success' && steps.plan.outputs.exitcode == '2' && '📋 Terraform Plan - Infrastructure: ⚠️ Changes Detected' || '📋 Terraform Plan - Infrastructure: ❌ Failed' }}"
                   }
                 },
                 {
                   "type": "section",
                   "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Service:*\nInfrastructure"
+                    },
                     {
                       "type": "mrkdwn",
                       "text": "*Environment:*\nProduction"
@@ -234,6 +236,10 @@ jobs:
                     {
                       "type": "mrkdwn",
                       "text": "*Commit:*\n<${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|`${{ github.sha }}`>"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Repository:*\n<${{ github.server_url }}/${{ github.repository }}|${{ github.repository }}>"
                     }
                   ]
                 },
@@ -244,7 +250,7 @@ jobs:
                       "type": "button",
                       "text": {
                         "type": "plain_text",
-                        "text": "View Details"
+                        "text": "View Workflow"
                       },
                       "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
                     }
@@ -350,8 +356,6 @@ jobs:
             ["skipped"]="⏭️"
           )
 
-          echo "# 🚀 Terraform Apply - Production" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
           echo "## 📊 Overview" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Step | Status |" >> $GITHUB_STEP_SUMMARY
@@ -365,24 +369,9 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           if [[ "${{ steps.apply.outcome }}" == "success" ]]; then
             echo "### ✅ Deployment Successful" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "<details>" >> $GITHUB_STEP_SUMMARY
-            echo "<summary>🔍 Click to view detailed apply</summary>" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo '```terraform' >> $GITHUB_STEP_SUMMARY
-            echo '${{ steps.apply.outputs.stdout }}' >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            echo "</details>" >> $GITHUB_STEP_SUMMARY
           else
             echo "### ❌ Deployment Failed" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "<details>" >> $GITHUB_STEP_SUMMARY
-            echo "<summary>🔍 Error Details</summary>" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo '```terraform' >> $GITHUB_STEP_SUMMARY
-            echo '${{ steps.apply.outputs.stderr }}' >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            echo "</details>" >> $GITHUB_STEP_SUMMARY
+            echo "Please review the workflow logs for error details." >> $GITHUB_STEP_SUMMARY
           fi
           echo "" >> $GITHUB_STEP_SUMMARY
 
@@ -402,19 +391,23 @@ jobs:
           token: ${{ secrets.SLACK_BOT_TOKEN }}
           payload: |
             {
-              "channel": "${{ vars.SLACK_CHANNEL_ID }}",
-              "text": "${{ job.status == 'success' && 'Terraform Apply - Production: Successful' || 'Terraform Apply - Production: Failed' }}",
+              "channel": "${{ vars.SLACK_CHANNEL_ID_PROD }}",
+              "text": "${{ job.status == 'success' && 'Terraform Apply - Infrastructure (Production): Successful' || 'Terraform Apply - Infrastructure (Production): Failed' }}",
               "blocks": [
                 {
                   "type": "header",
                   "text": {
                     "type": "plain_text",
-                    "text": "${{ job.status == 'success' && '🚀 Terraform Apply - Production: ✅ Successful' || '🚀 Terraform Apply - Production: ❌ Failed' }}"
+                    "text": "${{ job.status == 'success' && '🚀 Terraform Apply - Infrastructure: ✅ Successful' || '🚀 Terraform Apply - Infrastructure: ❌ Failed' }}"
                   }
                 },
                 {
                   "type": "section",
                   "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Service:*\nInfrastructure"
+                    },
                     {
                       "type": "mrkdwn",
                       "text": "*Environment:*\nProduction"
@@ -430,6 +423,10 @@ jobs:
                     {
                       "type": "mrkdwn",
                       "text": "*Commit:*\n<${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|`${{ github.sha }}`>"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Repository:*\n<${{ github.server_url }}/${{ github.repository }}|${{ github.repository }}>"
                     }
                   ]
                 },
@@ -440,7 +437,7 @@ jobs:
                       "type": "button",
                       "text": {
                         "type": "plain_text",
-                        "text": "View Details"
+                        "text": "View Workflow"
                       },
                       "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
                     }
