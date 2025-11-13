@@ -212,7 +212,7 @@ jobs:
                   "type": "header",
                   "text": {
                     "type": "plain_text",
-                    "text": "${{ steps.plan.outcome == 'success' && steps.plan.outputs.exitcode == '0' && '📋 Terraform Plan - Production: ✅ No Changes Detected' || steps.plan.outcome == 'success' && steps.plan.outputs.exitcode == '2' && '📋 Terraform Plan - Production: ⚠️ Changes Detected' || steps.plan.outcome == 'skipped' && '📋 Terraform Plan - Production: ⏭️ Skipped' || steps.confirm.outcome == 'cancelled' && '📋 Terraform Plan - Production: ⛔ Cancelled' || '📋 Terraform Plan - Production: ❌ Failed' }}"
+                    "text": "${{ job.status == 'success' && steps.plan.outputs.exitcode == '0' && '📋 Terraform Plan - Production: ✅ No Changes Detected' || job.status == 'success' && steps.plan.outputs.exitcode == '2' && '📋 Terraform Plan - Production: ⚠️ Changes Detected' || '📋 Terraform Plan - Production: ❌ Failed' }}"
                   }
                 },
                 {
