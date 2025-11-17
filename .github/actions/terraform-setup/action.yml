@@ -1,0 +1,26 @@
+name: Setup Terraform
+description: Install Terraform and initialize Terraform working directory
+
+inputs:
+  terraform-version:
+    description: Terraform version to install
+    required: true
+
+outputs:
+  init-outcome:
+    description: Init step outcome
+    value: ${{ steps.init.outcome }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ inputs.terraform-version }}
+
+    - name: Initialize Terraform
+      id: init
+      shell: bash
+      run: terraform init -input=false
+      working-directory: terraform/

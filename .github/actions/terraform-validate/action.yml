@@ -1,0 +1,32 @@
+name: Validate Terraform
+description: Check Terraform format and syntax errors
+
+inputs:
+  ignore-fmt-error:
+    description: Whether to ignore formating error
+    required: false
+    default: 'false'
+
+outputs:
+  fmt-outcome:
+    description: Format step outcome
+    value: ${{ steps.fmt.outcome }}
+  validate-outcome:
+    description: Validate step outcome
+    value: ${{ steps.validate.outcome }}
+
+runs:
+  using: composite
+  steps:
+    - name: Format Terraform
+      id: fmt
+      shell: bash
+      run: terraform fmt -recursive -check
+      working-directory: terraform/
+      continue-on-error: ${{ inputs.ignore-fmt-error == 'true' }}
+
+    - name: Validate Terraform
+      id: validate
+      shell: bash
+      working-directory: terraform/
+      run: terraform validate -no-color

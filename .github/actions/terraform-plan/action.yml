@@ -1,24 +1,11 @@
-name: Terraform Plan with Lambda Build
-description: Install Terraform, build Lambda functions, validate, and generate a plan
+name: Terraform Plan
+description: Generate and optionally upload Terraform plan with detailed exit code
 
 inputs:
   upload-plan-artifact:
     description: Whether to upload or not the plan artifact
     required: false
     default: 'false'
-  continue-on-fmt-error:
-    description: Whether to continue after formating error
-    required: false
-    default: 'false'
-  terraform-version:
-    description: Terraform version to install
-    required: true
-  lambda-build-dir:
-    description: Directory for Lambda build artifacts
-    required: true
-  lambda-artifact-name:
-    description: Name for Lambda artifact
-    required: true
   tfplan-binary:
     description: Name of Terraform plan binary file
     required: true
@@ -28,106 +15,15 @@ inputs:
 
 outputs:
   plan-exitcode:
-    description: "Terraform plan exit code"
+    description: Terraform plan exit code
     value: ${{ steps.plan.outputs.exitcode }}
-  init-outcome:
-    description: "Init step outcome"
-    value: ${{ steps.init.outcome }}
-  fmt-outcome:
-    description: "Format step outcome"
-    value: ${{ steps.fmt.outcome }}
-  validate-outcome:
-    description: "Validate step outcome"
-    value: ${{ steps.validate.outcome }}
-  build-outcome:
-    description: "Build step outcome"
-    value: ${{ steps.build.outcome }}
   plan-outcome:
-    description: "Plan step outcome"
+    description: Plan step outcome
     value: ${{ steps.plan.outcome }}
 
 runs:
-  using: "composite"
+  using: composite
   steps:
-    - name: Install Terraform
-      uses: hashicorp/setup-terraform@v3
-      with:
-        terraform_version: ${{ inputs.terraform-version }}
-
-    - name: Initialize Terraform
-      id: init
-      shell: bash
-      run: terraform init -input=false
-      working-directory: terraform/
-
-    - name: Format Terraform
-      id: fmt
-      shell: bash
-      run: terraform fmt -recursive -check
-      working-directory: terraform/
-      continue-on-error: ${{ inputs.continue-on-fmt-error == 'true' }}
-
-    - name: Validate Terraform
-      id: validate
-      shell: bash
-      working-directory: terraform/
-      run: terraform validate -no-color
-
-    - name: Build Lambda Functions
-      id: build
-      shell: bash
-      run: |
-        echo "Searching for Lambda functions..."
-        lambda_dirs=$(find ./lambda/ -name "main.go" -printf '%h\n' | sort -u)
-
-        lambda_count=$(echo "$lambda_dirs" | wc -l)
-        echo "Found $lambda_count Lambda function(s) to build"
-        echo ""
-
-        echo "Output directory: ${{ inputs.lambda-build-dir }}"
-        mkdir -p "${{ inputs.lambda-build-dir }}"
-        echo ""
-
-        for dir in $lambda_dirs; do
-          func_name=$(basename "$dir")
-
-          echo "Building lambda function: $func_name"
-          echo "  - Source: $dir"
-          echo "  - Target: ${{ inputs.lambda-build-dir }}/$func_name.zip"
-
-          cd "$dir"
-
-          output_binary="${{ inputs.lambda-build-dir }}/bootstrap"
-          if GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -o "$output_binary" main.go; then
-              binary_size=$(stat -c%s "$output_binary" | numfmt --to=iec-i --suffix=B)
-              
-              TZ=UTC touch -t 202001010000.00 "$output_binary"
-              zip -X -j "${{ inputs.lambda-build-dir }}/$func_name.zip" "$output_binary"
-              TZ=UTC touch -t 202001010000.00 "${{ inputs.lambda-build-dir }}/$func_name.zip"
-
-              rm "$output_binary"
-              echo "Build successful (size: $binary_size)"
-          else
-              echo "Error: Build failed"
-              exit 1
-          fi
-          
-          cd - > /dev/null
-          echo ""
-        done
-
-        echo "All Lambda functions compiled successfully"
-        echo ""
-
-    - name: Upload Lambda Build Artifacts
-      uses: actions/upload-artifact@v5
-      with:
-        name: ${{ inputs.lambda-artifact-name }}
-        path: ${{ inputs.lambda-build-dir }}
-        if-no-files-found: error
-        overwrite: true
-        retention-days: 5
-
     - name: Plan Terraform
       id: plan
       shell: bash

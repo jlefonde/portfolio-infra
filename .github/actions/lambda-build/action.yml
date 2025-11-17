@@ -1,0 +1,73 @@
+name: Build Lambda Functions
+description: Compile Go Lambda functions and upload build artifacts
+
+inputs:
+  lambda-build-dir:
+    description: Directory for Lambda build artifacts
+    required: true
+  lambda-artifact-name:
+    description: Name for Lambda artifact
+    required: true
+
+outputs:
+  build-outcome:
+    description: Build step outcome
+    value: ${{ steps.build.outcome }}
+
+runs:
+  using: composite
+  steps:
+    - name: Build Lambda Functions
+      id: build
+      shell: bash
+      run: |
+        echo "Searching for Lambda functions..."
+        lambda_dirs=$(find ./lambda/ -name "main.go" -printf '%h\n' | sort -u)
+
+        lambda_count=$(echo "$lambda_dirs" | wc -l)
+        echo "Found $lambda_count Lambda function(s) to build"
+        echo ""
+
+        echo "Output directory: ${{ inputs.lambda-build-dir }}"
+        mkdir -p "${{ inputs.lambda-build-dir }}"
+        echo ""
+
+        for dir in $lambda_dirs; do
+          func_name=$(basename "$dir")
+
+          echo "Building lambda function: $func_name"
+          echo "  - Source: $dir"
+          echo "  - Target: ${{ inputs.lambda-build-dir }}/$func_name.zip"
+
+          cd "$dir"
+
+          output_binary="${{ inputs.lambda-build-dir }}/bootstrap"
+          if GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -o "$output_binary" main.go; then
+              binary_size=$(stat -c%s "$output_binary" | numfmt --to=iec-i --suffix=B)
+              
+              TZ=UTC touch -t 202001010000.00 "$output_binary"
+              zip -X -j "${{ inputs.lambda-build-dir }}/$func_name.zip" "$output_binary"
+              TZ=UTC touch -t 202001010000.00 "${{ inputs.lambda-build-dir }}/$func_name.zip"
+
+              rm "$output_binary"
+              echo "Build successful (size: $binary_size)"
+          else
+              echo "Error: Build failed"
+              exit 1
+          fi
+          
+          cd - > /dev/null
+          echo ""
+        done
+
+        echo "All Lambda functions compiled successfully"
+        echo ""
+
+    - name: Upload Lambda Build Artifacts
+      uses: actions/upload-artifact@v5
+      with:
+        name: ${{ inputs.lambda-artifact-name }}
+        path: ${{ inputs.lambda-build-dir }}
+        if-no-files-found: error
+        overwrite: true
+        retention-days: 5

@@ -42,13 +42,30 @@ jobs:
           role-to-assume: ${{ vars.AWS_TF_PLAN_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
 
-      - id: plan
+      - name: Setup Terraform
+        id: setup
+        uses: ./.github/actions/terraform-setup
+        with:
+          terraform-version: ${{ vars.TERRAFORM_VERSION }}
+
+      - name: Validate Terraform
+        id: validate
+        uses: ./.github/actions/terraform-validate
+        with:
+          ignore-fmt-error: true
+
+      - name: Build Lambda Functions
+        id: build
+        uses: ./.github/actions/lambda-build
+        with:
+          lambda-build-dir: ${{ env.TF_VAR_lambda_build_dir }}
+          lambda-artifact-name: ${{ env.LAMBDA_ARTIFACT_NAME }}
+
+      - name: Plan Terraform
+        id: plan
         uses: ./.github/actions/terraform-plan
         with:
           upload-plan-artifact: true
-          terraform-version: ${{ vars.TERRAFORM_VERSION }}
-          lambda-build-dir: ${{ env.TF_VAR_lambda_build_dir }}
-          lambda-artifact-name: ${{ env.LAMBDA_ARTIFACT_NAME }}
           tfplan-binary: ${{ env.TFPLAN_BINARY }}
           var-file: ${{ env.VAR_FILE }}
 
@@ -66,10 +83,10 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Step | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| ⚙️ Init | ${outcomes[${{ steps.plan.outputs.init-outcome }}]} ${{ steps.plan.outputs.init-outcome }}" >> $GITHUB_STEP_SUMMARY
-          echo "| 📝 Format | ${outcomes[${{ steps.plan.outputs.fmt-outcome}}]} ${{ steps.plan.outputs.fmt-outcome}}" >> $GITHUB_STEP_SUMMARY
-          echo "| 🛡️ Validate | ${outcomes[${{ steps.plan.outputs.validate-outcome }}]} ${{ steps.plan.outputs.validate-outcome }}" >> $GITHUB_STEP_SUMMARY
-          echo "| 🔨 Build | ${outcomes[${{ steps.plan.outputs.build-outcome }}]} ${{ steps.plan.outputs.build-outcome }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| ⚙️ Init | ${outcomes[${{ steps.setup.outputs.init-outcome }}]} ${{ steps.setup.outputs.init-outcome }}" >> $GITHUB_STEP_SUMMARY
+          echo "| 📝 Format | ${outcomes[${{ steps.validate.outputs.fmt-outcome}}]} ${{ steps.validate.outputs.fmt-outcome}}" >> $GITHUB_STEP_SUMMARY
+          echo "| 🛡️ Validate | ${outcomes[${{ steps.validate.outputs.validate-outcome }}]} ${{ steps.validate.outputs.validate-outcome }}" >> $GITHUB_STEP_SUMMARY
+          echo "| 🔨 Build | ${outcomes[${{ steps.build.outputs.build-outcome }}]} ${{ steps.build.outputs.build-outcome }} |" >> $GITHUB_STEP_SUMMARY
           echo "| 📋 Plan | ${outcomes[${{ steps.plan.outputs.plan-outcome }}]} ${{ steps.plan.outputs.plan-outcome }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
