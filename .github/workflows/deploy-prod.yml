@@ -72,22 +72,17 @@ jobs:
       - name: Create Plan Summary
         if: ${{ always() && steps.confirm.outcome != 'failure' }}
         run: |
-          declare -gA outcomes=(
-            ["success"]="✅"
-            ["failure"]="❌"
-            ["cancelled"]="⛔"
-            ["skipped"]="⏭️"
-          )
+          source ./.github/scripts/utils/constants.sh
 
           echo "## 📊 Overview" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Step | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| ⚙️ Init | ${outcomes[${{ steps.setup.outputs.init-outcome }}]} ${{ steps.setup.outputs.init-outcome }}" >> $GITHUB_STEP_SUMMARY
-          echo "| 📝 Format | ${outcomes[${{ steps.validate.outputs.fmt-outcome}}]} ${{ steps.validate.outputs.fmt-outcome}}" >> $GITHUB_STEP_SUMMARY
-          echo "| 🛡️ Validate | ${outcomes[${{ steps.validate.outputs.validate-outcome }}]} ${{ steps.validate.outputs.validate-outcome }}" >> $GITHUB_STEP_SUMMARY
-          echo "| 🔨 Build | ${outcomes[${{ steps.build.outputs.build-outcome }}]} ${{ steps.build.outputs.build-outcome }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| 📋 Plan | ${outcomes[${{ steps.plan.outputs.plan-outcome }}]} ${{ steps.plan.outputs.plan-outcome }}" >> $GITHUB_STEP_SUMMARY
+          echo "| ⚙️ Init | ${OUTCOMES[${{ steps.setup.outputs.init-outcome }}]} ${{ steps.setup.outputs.init-outcome }}" >> $GITHUB_STEP_SUMMARY
+          echo "| 📝 Format | ${OUTCOMES[${{ steps.validate.outputs.fmt-outcome}}]} ${{ steps.validate.outputs.fmt-outcome}}" >> $GITHUB_STEP_SUMMARY
+          echo "| 🛡️ Validate | ${OUTCOMES[${{ steps.validate.outputs.validate-outcome }}]} ${{ steps.validate.outputs.validate-outcome }}" >> $GITHUB_STEP_SUMMARY
+          echo "| 🔨 Build | ${OUTCOMES[${{ steps.build.outputs.build-outcome }}]} ${{ steps.build.outputs.build-outcome }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 📋 Plan | ${OUTCOMES[${{ steps.plan.outputs.plan-outcome }}]} ${{ steps.plan.outputs.plan-outcome }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
           echo "## 📋 Plan" >> $GITHUB_STEP_SUMMARY
@@ -131,7 +126,7 @@ jobs:
           payload: |
             {
               "channel": "${{ vars.SLACK_CHANNEL_ID_PROD }}",
-              "text": "${{ job.status == 'success' && steps.plan.outputs.plan-exitcode == '0' && 'Terraform Plan - Infrastructure (Production): No Changes Detected' || job.status == 'success' && steps.plan.outputs.plan-exitcode == '2' && 'Terraform Plan - Infrastructure (Production): Changes Detected' || 'Terraform Plan - Infrastructure (Production): Failed' }}",
+              "text": "${{ job.status == 'success' && steps.plan.outputs.plan-exitcode == '0' && 'Terraform Plan - Infrastructure: No Changes Detected' || job.status == 'success' && steps.plan.outputs.plan-exitcode == '2' && 'Terraform Plan - Infrastructure: Changes Detected' || 'Terraform Plan - Infrastructure (Production): Failed' }}",
               "blocks": [
                 {
                   "type": "header",
@@ -192,15 +187,11 @@ jobs:
           role-to-assume: ${{ vars.AWS_TF_APPLY_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
 
-      - name: Install Terraform
-        uses: hashicorp/setup-terraform@v3
+      - name: Setup Terraform
+        id: setup
+        uses: ./.github/actions/terraform-setup
         with:
-          terraform_version: ${{ vars.TERRAFORM_VERSION }}
-
-      - name: Initialize Terraform
-        id: init
-        run: terraform init -input=false
-        working-directory: terraform/
+          terraform-version: ${{ vars.TERRAFORM_VERSION }}
 
       - name: Download Lambda Build Artifacts
         uses: actions/download-artifact@v5
@@ -217,43 +208,10 @@ jobs:
       - name: Drift Detection
         id: drift
         run: |
-          TFPLAN_DRIFT_CHECK="tfplan-drift-check"
-          set +e
-          terraform plan \
-            -var-file="$VAR_FILE" \
-            -out="$TFPLAN_DRIFT_CHECK" \
-            -detailed-exitcode \
-            -no-color \
-            -input=false
-
-          TF_EXITCODE=$?
-          set -e
-
-          if [[ $TF_EXITCODE -eq 0 ]]; then
-            echo "No drift detected - infrastructure matches expected state"
-          elif [[ $TF_EXITCODE -eq 2 ]]; then
-            echo "Warning: State has drifted - comparing plans..."
-            
-            terraform show -no-color "$TFPLAN_DRIFT_CHECK" > drift-check.txt
-            terraform show -no-color "$TFPLAN_BINARY" > original-plan.txt
-
-            sed -n '/Terraform will perform the following actions:/,$p' original-plan.txt > original-changes.txt
-            sed -n '/Terraform will perform the following actions:/,$p' drift-check.txt > drift-changes.txt
-
-            if diff -u original-changes.txt drift-changes.txt > plan-diff.txt; then
-              echo "Plans are identical"
-            else
-              echo "Warning: Plans differ - showing differences..."
-              echo ""
-              echo "=== Plan Differences ==="
-              cat plan-diff.txt
-
-              exit 1
-            fi
-          else
-            echo "Error: Drift check failed"
-            exit 1
-          fi
+          chmod +x "$DRIFT_SCRIPT"
+          "$DRIFT_SCRIPT"
+        env:
+          DRIFT_SCRIPT: ./.github/scripts/drift-detection.sh
         working-directory: terraform/
 
       - name: Apply Terraform
@@ -267,20 +225,15 @@ jobs:
       - name: Create Apply Summary
         if: always()
         run: |
-          declare -gA outcomes=(
-            ["success"]="✅"
-            ["failure"]="❌"
-            ["cancelled"]="⛔"
-            ["skipped"]="⏭️"
-          )
+          source ./.github/scripts/utils/constants.sh
 
           echo "## 📊 Overview" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Step | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| ⚙️ Init | ${outcomes[${{ steps.init.outcome }}]} ${{ steps.init.outcome }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| 🔍 Drift Detection | ${outcomes[${{ steps.drift.outcome }}]} ${{ steps.drift.outcome }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| 🚀 Apply | ${outcomes[${{ steps.apply.outcome }}]} ${{ steps.apply.outcome }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| ⚙️ Init | ${OUTCOMES[${{ steps.setup.outputs.init-outcome }}]} ${{ steps.setup.outputs.init-outcome }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🔍 Drift Detection | ${OUTCOMES[${{ steps.drift.outcome }}]} ${{ steps.drift.outcome }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🚀 Apply | ${OUTCOMES[${{ steps.apply.outcome }}]} ${{ steps.apply.outcome }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
           echo "## 🚀 Apply" >> $GITHUB_STEP_SUMMARY
@@ -310,7 +263,7 @@ jobs:
           payload: |
             {
               "channel": "${{ vars.SLACK_CHANNEL_ID_PROD }}",
-              "text": "${{ job.status == 'success' && 'Terraform Apply - Infrastructure (Production): Successful' || 'Terraform Apply - Infrastructure (Production): Failed' }}",
+              "text": "${{ job.status == 'success' && 'Terraform Apply - Infrastructure: Successful' || 'Terraform Apply - Infrastructure: Failed' }}",
               "blocks": [
                 {
                   "type": "header",
