@@ -5,13 +5,11 @@ inputs:
   upload-plan-artifact:
     description: Whether to upload or not the plan artifact
     required: false
-    default: false
-    type: boolean
+    default: 'false'
   continue-on-fmt-error:
     description: Whether to continue after formating error
     required: false
-    default: false
-    type: boolean
+    default: 'false'
   terraform-version:
     description: Terraform version to install
     required: true
@@ -58,22 +56,26 @@ runs:
 
     - name: Initialize Terraform
       id: init
+      shell: bash
       run: terraform init -input=false
       working-directory: terraform/
 
     - name: Format Terraform
       id: fmt
+      shell: bash
       run: terraform fmt -recursive -check
       working-directory: terraform/
-      continue-on-error: ${{ inputs.continue-on-fmt-error }}
+      continue-on-error: ${{ inputs.continue-on-fmt-error == 'true' }}
 
     - name: Validate Terraform
       id: validate
+      shell: bash
       working-directory: terraform/
       run: terraform validate -no-color
 
     - name: Build Lambda Functions
       id: build
+      shell: bash
       run: |
         echo "Searching for Lambda functions..."
         lambda_dirs=$(find ./lambda/ -name "main.go" -printf '%h\n' | sort -u)
@@ -128,6 +130,7 @@ runs:
 
     - name: Plan Terraform
       id: plan
+      shell: bash
       run: |
         set +e
         terraform plan \
@@ -144,7 +147,7 @@ runs:
       working-directory: terraform/
 
     - name: Upload Plan Artifact
-      if: ${{ inputs.upload-plan-artifact }}
+      if: ${{ inputs.upload-plan-artifact == 'true' }}
       uses: actions/upload-artifact@v5
       with:
         name: ${{ inputs.tfplan-binary }}
