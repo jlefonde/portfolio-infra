@@ -1,0 +1,154 @@
+name: Terraform Plan with Lambda Build
+description: Install Terraform, build Lambda functions, validate, and generate a plan
+
+inputs:
+  upload-plan-artifact:
+    description: Whether to upload or not the plan artifact
+    required: false
+    default: false
+    type: boolean
+  continue-on-fmt-error:
+    description: Whether to continue after formating error
+    required: false
+    default: false
+    type: boolean
+  terraform-version:
+    description: Terraform version to install
+    required: true
+  lambda-build-dir:
+    description: Directory for Lambda build artifacts
+    required: true
+  lambda-artifact-name:
+    description: Name for Lambda artifact
+    required: true
+  tfplan-binary:
+    description: Name of Terraform plan binary file
+    required: true
+  var-file:
+    description: Path to Terraform variables file
+    required: true
+
+outputs:
+  plan-exitcode:
+    description: "Terraform plan exit code"
+    value: ${{ steps.plan.outputs.exitcode }}
+  init-outcome:
+    description: "Init step outcome"
+    value: ${{ steps.init.outcome }}
+  fmt-outcome:
+    description: "Format step outcome"
+    value: ${{ steps.fmt.outcome }}
+  validate-outcome:
+    description: "Validate step outcome"
+    value: ${{ steps.validate.outcome }}
+  build-outcome:
+    description: "Build step outcome"
+    value: ${{ steps.build.outcome }}
+  plan-outcome:
+    description: "Plan step outcome"
+    value: ${{ steps.plan.outcome }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ inputs.terraform-version }}
+
+    - name: Initialize Terraform
+      id: init
+      run: terraform init -input=false
+      working-directory: terraform/
+
+    - name: Format Terraform
+      id: fmt
+      run: terraform fmt -recursive -check
+      working-directory: terraform/
+      continue-on-error: ${{ inputs.continue-on-fmt-error }}
+
+    - name: Validate Terraform
+      id: validate
+      working-directory: terraform/
+      run: terraform validate -no-color
+
+    - name: Build Lambda Functions
+      id: build
+      run: |
+        echo "Searching for Lambda functions..."
+        lambda_dirs=$(find ./lambda/ -name "main.go" -printf '%h\n' | sort -u)
+
+        lambda_count=$(echo "$lambda_dirs" | wc -l)
+        echo "Found $lambda_count Lambda function(s) to build"
+        echo ""
+
+        echo "Output directory: ${{ inputs.lambda-build-dir }}"
+        mkdir -p "${{ inputs.lambda-build-dir }}"
+        echo ""
+
+        for dir in $lambda_dirs; do
+          func_name=$(basename "$dir")
+
+          echo "Building lambda function: $func_name"
+          echo "  - Source: $dir"
+          echo "  - Target: ${{ inputs.lambda-build-dir }}/$func_name.zip"
+
+          cd "$dir"
+
+          output_binary="${{ inputs.lambda-build-dir }}/bootstrap"
+          if GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -o "$output_binary" main.go; then
+              binary_size=$(stat -c%s "$output_binary" | numfmt --to=iec-i --suffix=B)
+              
+              TZ=UTC touch -t 202001010000.00 "$output_binary"
+              zip -X -j "${{ inputs.lambda-build-dir }}/$func_name.zip" "$output_binary"
+              TZ=UTC touch -t 202001010000.00 "${{ inputs.lambda-build-dir }}/$func_name.zip"
+
+              rm "$output_binary"
+              echo "Build successful (size: $binary_size)"
+          else
+              echo "Error: Build failed"
+              exit 1
+          fi
+          
+          cd - > /dev/null
+          echo ""
+        done
+
+        echo "All Lambda functions compiled successfully"
+        echo ""
+
+    - name: Upload Lambda Build Artifacts
+      uses: actions/upload-artifact@v5
+      with:
+        name: ${{ inputs.lambda-artifact-name }}
+        path: ${{ inputs.lambda-build-dir }}
+        if-no-files-found: error
+        overwrite: true
+        retention-days: 5
+
+    - name: Plan Terraform
+      id: plan
+      run: |
+        set +e
+        terraform plan \
+          -var-file="${{ inputs.var-file }}" \
+          -out="${{ inputs.tfplan-binary }}" \
+          -detailed-exitcode \
+          -no-color \
+          -input=false
+
+        TF_EXITCODE=$?
+        set -e
+
+        [[ $TF_EXITCODE -ne 1 ]] || exit 1
+      working-directory: terraform/
+
+    - name: Upload Plan Artifact
+      if: ${{ inputs.upload-plan-artifact }}
+      uses: actions/upload-artifact@v5
+      with:
+        name: ${{ inputs.tfplan-binary }}
+        path: terraform/${{ inputs.tfplan-binary }}
+        if-no-files-found: error
+        overwrite: true
+        retention-days: 5

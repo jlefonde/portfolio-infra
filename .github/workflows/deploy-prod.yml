@@ -23,7 +23,7 @@ jobs:
     if: ${{ github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     outputs:
-      plan_exitcode: ${{ steps.plan.outputs.exitcode }}
+      plan_exitcode: ${{ steps.plan.outputs.plan-exitcode }}
 
     steps:
       - name: Validate Deploy Confirmation
@@ -42,106 +42,15 @@ jobs:
           role-to-assume: ${{ vars.AWS_TF_PLAN_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
 
-      - name: Install Terraform
-        uses: hashicorp/setup-terraform@v3
+      - id: plan
+        uses: ./.github/actions/terraform-plan
         with:
-          terraform_version: ${{ vars.TERRAFORM_VERSION }}
-
-      - name: Initialize Terraform
-        id: init
-        run: terraform init -input=false
-        working-directory: terraform/
-
-      - name: Format Terraform
-        id: fmt
-        run: terraform fmt -recursive -check
-        working-directory: terraform/
-        continue-on-error: true
-
-      - name: Validate Terraform
-        id: validate
-        working-directory: terraform/
-        run: terraform validate -no-color
-
-      - name: Build Lambda Functions
-        id: build
-        run: |
-          echo "Searching for Lambda functions..."
-          lambda_dirs=$(find ./lambda/ -name "main.go" -printf '%h\n' | sort -u)
-
-          lambda_count=$(echo "$lambda_dirs" | wc -l)
-          echo "Found $lambda_count Lambda function(s) to build"
-          echo ""
-
-          echo "Output directory: ${{ env.TF_VAR_lambda_build_dir }}"
-          mkdir -p "${{ env.TF_VAR_lambda_build_dir }}"
-          echo ""
-
-          for dir in $lambda_dirs; do
-            func_name=$(basename "$dir")
-
-            echo "Building lambda function: $func_name"
-            echo "  - Source: $dir"
-            echo "  - Target: ${{ env.TF_VAR_lambda_build_dir }}/$func_name.zip"
-
-            cd "$dir"
-
-            output_binary="${{ env.TF_VAR_lambda_build_dir }}/bootstrap"
-            if GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -o "$output_binary" main.go; then
-                binary_size=$(stat -c%s "$output_binary" | numfmt --to=iec-i --suffix=B)
-                
-                TZ=UTC touch -t 202001010000.00 "$output_binary"
-                zip -X -j "${{ env.TF_VAR_lambda_build_dir }}/$func_name.zip" "$output_binary"
-                TZ=UTC touch -t 202001010000.00 "${{ env.TF_VAR_lambda_build_dir }}/$func_name.zip"
-
-                rm "$output_binary"
-                echo "Build successful (size: $binary_size)"
-            else
-                echo "Error: Build failed"
-                exit 1
-            fi
-            
-            cd - > /dev/null
-            echo ""
-          done
-
-          echo "All Lambda functions compiled successfully"
-          echo ""
-
-      - name: Upload Lambda Build Artifacts
-        uses: actions/upload-artifact@v5
-        with:
-          name: ${{ env.LAMBDA_ARTIFACT_NAME }}
-          path: ${{ env.TF_VAR_lambda_build_dir }}
-          if-no-files-found: error
-          overwrite: true
-          retention-days: 5
-
-      - name: Plan Terraform
-        id: plan
-        run: |
-          set +e
-          terraform plan \
-            -var-file="$VAR_FILE" \
-            -out="$TFPLAN_BINARY" \
-            -detailed-exitcode \
-            -no-color \
-            -input=false
-
-          TF_EXITCODE=$?
-          set -e
-
-          [[ $TF_EXITCODE -ne 1 ]] || exit 1
-        working-directory: terraform/
-
-      - name: Upload Plan Artifact
-        uses: actions/upload-artifact@v5
-        with:
-          name: ${{ env.TFPLAN_BINARY }}
-          path: terraform/${{ env.TFPLAN_BINARY }}
-          if-no-files-found: error
-          overwrite: true
-          retention-days: 5
+          upload-plan-artifact: true
+          terraform-version: ${{ vars.TERRAFORM_VERSION }}
+          lambda-build-dir: ${{ env.TF_VAR_lambda_build_dir }}
+          lambda-artifact-name: ${{ env.LAMBDA_ARTIFACT_NAME }}
+          tfplan-binary: ${{ env.TFPLAN_BINARY }}
+          var-file: ${{ env.VAR_FILE }}
 
       - name: Create Plan Summary
         if: ${{ always() && steps.confirm.outcome != 'failure' }}
@@ -157,20 +66,20 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Step | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| ⚙️ Init | ${outcomes[${{ steps.init.outcome }}]} ${{ steps.init.outcome }}" >> $GITHUB_STEP_SUMMARY
-          echo "| 📝 Format | ${outcomes[${{ steps.fmt.outcome }}]} ${{ steps.fmt.outcome }}" >> $GITHUB_STEP_SUMMARY
-          echo "| 🛡️ Validate | ${outcomes[${{ steps.validate.outcome }}]} ${{ steps.validate.outcome }}" >> $GITHUB_STEP_SUMMARY
-          echo "| 🔨 Build | ${outcomes[${{ steps.build.outcome }}]} ${{ steps.build.outcome }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| 📋 Plan | ${outcomes[${{ steps.plan.outcome }}]} ${{ steps.plan.outcome }}" >> $GITHUB_STEP_SUMMARY
+          echo "| ⚙️ Init | ${outcomes[${{ steps.plan.outputs.init-outcome }}]} ${{ steps.plan.outputs.init-outcome }}" >> $GITHUB_STEP_SUMMARY
+          echo "| 📝 Format | ${outcomes[${{ steps.plan.outputs.fmt-outcome}}]} ${{ steps.plan.outputs.fmt-outcome}}" >> $GITHUB_STEP_SUMMARY
+          echo "| 🛡️ Validate | ${outcomes[${{ steps.plan.outputs.validate-outcome }}]} ${{ steps.plan.outputs.validate-outcome }}" >> $GITHUB_STEP_SUMMARY
+          echo "| 🔨 Build | ${outcomes[${{ steps.plan.outputs.build-outcome }}]} ${{ steps.plan.outputs.build-outcome }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 📋 Plan | ${outcomes[${{ steps.plan.outputs.plan-outcome }}]} ${{ steps.plan.outputs.plan-outcome }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
           echo "## 📋 Plan" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          if [[ "${{ steps.plan.outputs.exitcode }}" == "0" ]]; then
+          if [[ "${{ steps.plan.outputs.plan-exitcode }}" == "0" ]]; then
             echo "### ✅ No Changes Detected" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "Infrastructure is up to date. No changes required." >> $GITHUB_STEP_SUMMARY
-          elif [[ "${{ steps.plan.outputs.exitcode }}" == "2" ]]; then
+          elif [[ "${{ steps.plan.outputs.plan-exitcode }}" == "2" ]]; then
             echo "### ⚠️ Changes Detected - Review Required" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "<details>" >> $GITHUB_STEP_SUMMARY
@@ -205,26 +114,18 @@ jobs:
           payload: |
             {
               "channel": "${{ vars.SLACK_CHANNEL_ID_PROD }}",
-              "text": "${{ job.status == 'success' && steps.plan.outputs.exitcode == '0' && 'Terraform Plan - Infrastructure (Production): No Changes Detected' || job.status == 'success' && steps.plan.outputs.exitcode == '2' && 'Terraform Plan - Infrastructure (Production): Changes Detected' || 'Terraform Plan - Infrastructure (Production): Failed' }}",
+              "text": "${{ job.status == 'success' && steps.plan.outputs.plan-exitcode == '0' && 'Terraform Plan - Infrastructure (Production): No Changes Detected' || job.status == 'success' && steps.plan.outputs.plan-exitcode == '2' && 'Terraform Plan - Infrastructure (Production): Changes Detected' || 'Terraform Plan - Infrastructure (Production): Failed' }}",
               "blocks": [
                 {
                   "type": "header",
                   "text": {
                     "type": "plain_text",
-                    "text": "${{ job.status == 'success' && steps.plan.outputs.exitcode == '0' && '📋 Terraform Plan - Infrastructure: ✅ No Changes' || job.status == 'success' && steps.plan.outputs.exitcode == '2' && '📋 Terraform Plan - Infrastructure: ⚠️ Changes Detected' || '📋 Terraform Plan - Infrastructure: ❌ Failed' }}"
+                    "text": "${{ job.status == 'success' && steps.plan.outputs.plan-exitcode == '0' && '📋 Terraform Plan - Infrastructure: ✅ No Changes Detected' || job.status == 'success' && steps.plan.outputs.plan-exitcode == '2' && '📋 Terraform Plan - Infrastructure: ⚠️ Changes Detected' || '📋 Terraform Plan - Infrastructure: ❌ Failed' }}"
                   }
                 },
                 {
                   "type": "section",
                   "fields": [
-                    {
-                      "type": "mrkdwn",
-                      "text": "*Service:*\nInfrastructure"
-                    },
-                    {
-                      "type": "mrkdwn",
-                      "text": "*Environment:*\nProduction"
-                    },
                     {
                       "type": "mrkdwn",
                       "text": "*Triggered by:*\n${{ github.actor }}"
@@ -404,14 +305,6 @@ jobs:
                 {
                   "type": "section",
                   "fields": [
-                    {
-                      "type": "mrkdwn",
-                      "text": "*Service:*\nInfrastructure"
-                    },
-                    {
-                      "type": "mrkdwn",
-                      "text": "*Environment:*\nProduction"
-                    },
                     {
                       "type": "mrkdwn",
                       "text": "*Deployed by:*\n${{ github.actor }}"
