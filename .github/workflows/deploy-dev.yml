@@ -65,6 +65,64 @@ jobs:
             -no-color
         working-directory: terraform/
 
+      - name: Create Summary
+        if: always()
+        run: |
+          source ${{ github.workspace}}/.github/scripts/utils/constants.sh
+
+          echo "## 📊 Overview" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Step | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| ⚙️ Init | ${OUTCOMES[${{ steps.setup.outputs.init-outcome }}]} ${{ steps.setup.outputs.init-outcome }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 📝 Format | ${OUTCOMES[${{ steps.validate.outputs.fmt-outcome}}]} ${{ steps.validate.outputs.fmt-outcome}}" >> $GITHUB_STEP_SUMMARY
+          echo "| 🛡️ Validate | ${OUTCOMES[${{ steps.validate.outputs.validate-outcome }}]} ${{ steps.validate.outputs.validate-outcome }}" >> $GITHUB_STEP_SUMMARY
+          echo "| 🔨 Build | ${OUTCOMES[${{ steps.build.outputs.build-outcome }}]} ${{ steps.build.outputs.build-outcome }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 📋 Plan | ${OUTCOMES[${{ steps.plan.outputs.plan-outcome }}]} ${{ steps.plan.outputs.plan-outcome }}" >> $GITHUB_STEP_SUMMARY
+          echo "| 🚀 Apply | ${OUTCOMES[${{ steps.apply.outcome }}]} ${{ steps.apply.outcome }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "## 📋 Plan" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [[ "${{ steps.plan.outputs.plan-exitcode }}" == "0" ]]; then
+            echo "### ✅ No Changes Detected" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Infrastructure is up to date. No changes required." >> $GITHUB_STEP_SUMMARY
+          elif [[ "${{ steps.plan.outputs.plan-exitcode }}" == "2" ]]; then
+            echo "### ⚠️ Changes Detected - Review Required" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "<details>" >> $GITHUB_STEP_SUMMARY
+            echo "<summary>🔍 Click to view detailed plan</summary>" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo '```terraform' >> $GITHUB_STEP_SUMMARY
+            terraform show $TFPLAN_BINARY -no-color >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "</details>" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ❌ Plan Failed" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Please review the workflow logs for error details." >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "## 🚀 Apply" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [[ "${{ steps.apply.outcome }}" == "success" ]]; then
+            echo "### ✅ Deployment Successful" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ❌ Deployment Failed" >> $GITHUB_STEP_SUMMARY
+            echo "Please review the workflow logs for error details." >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Timestamp:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Triggered by:** @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch:** \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Workflow:** [${{ github.workflow }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
+
       - name: Post Slack Message
         if: always()
         uses: slackapi/slack-github-action@v2.1.1
