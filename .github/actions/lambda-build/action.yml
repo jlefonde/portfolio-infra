@@ -5,9 +5,12 @@ inputs:
   lambda-build-dir:
     description: Directory for Lambda build artifacts
     required: true
+  upload-lambda-artifact:
+    description: Whether to upload or not the lambda artifact
+    required: false
+    default: 'false'
   lambda-artifact-name:
     description: Name for Lambda artifact
-    required: true
 
 outputs:
   build-outcome:
@@ -17,6 +20,13 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Validate Lambda Artifact Name is Required
+      if: ${{ inputs.upload-lambda-artifact == 'true' && inputs.lambda-artifact-name == '' }}
+      shell: bash
+      run: |
+        echo "::error::lambda-artifact-name input is required when upload-lambda-artifact is set to true"
+        exit 1
+
     - name: Build Lambda Functions
       id: build
       shell: bash
@@ -64,6 +74,7 @@ runs:
         echo ""
 
     - name: Upload Lambda Build Artifacts
+      if: ${{ inputs.upload-lambda-artifact == 'true' }}
       uses: actions/upload-artifact@v5
       with:
         name: ${{ inputs.lambda-artifact-name }}

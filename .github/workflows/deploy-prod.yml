@@ -47,6 +47,7 @@ jobs:
         uses: ./.github/actions/terraform-setup
         with:
           terraform-version: ${{ vars.TERRAFORM_VERSION }}
+          backend-config: environments/prod/backend.tfbackend
 
       - name: Validate Terraform
         id: validate
@@ -60,6 +61,7 @@ jobs:
         with:
           lambda-build-dir: ${{ env.TF_VAR_lambda_build_dir }}
           lambda-artifact-name: ${{ env.LAMBDA_ARTIFACT_NAME }}
+          upload-lambda-artifact: true
 
       - name: Plan Terraform
         id: plan
@@ -192,6 +194,7 @@ jobs:
         uses: ./.github/actions/terraform-setup
         with:
           terraform-version: ${{ vars.TERRAFORM_VERSION }}
+          backend-config: environments/prod/backend.tfbackend
 
       - name: Download Lambda Build Artifacts
         uses: actions/download-artifact@v5

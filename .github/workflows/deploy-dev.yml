@@ -1,0 +1,120 @@
+name: Deploy Development
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  VAR_FILE: environments/dev/terraform.tfvars
+  TFPLAN_BINARY: tfplan-${{ github.sha }}
+  LAMBDA_ARTIFACT_NAME: lambda-functions-${{ github.sha }}
+  TF_VAR_lambda_build_dir: ${{ github.workspace }}/dist
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v5
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_TF_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Setup Terraform
+        id: setup
+        uses: ./.github/actions/terraform-setup
+        with:
+          terraform-version: ${{ vars.TERRAFORM_VERSION }}
+          backend-config: environments/dev/backend.tfbackend
+
+      - name: Validate Terraform
+        id: validate
+        uses: ./.github/actions/terraform-validate
+        with:
+          ignore-fmt-error: true
+
+      - name: Build Lambda Functions
+        id: build
+        uses: ./.github/actions/lambda-build
+        with:
+          lambda-build-dir: ${{ env.TF_VAR_lambda_build_dir }}
+
+      - name: Plan Terraform
+        id: plan
+        uses: ./.github/actions/terraform-plan
+        with:
+          upload-plan-artifact: false
+          tfplan-binary: ${{ env.TFPLAN_BINARY }}
+          var-file: ${{ env.VAR_FILE }}
+
+      - name: Apply Terraform
+        id: apply
+        run: |
+          terraform apply \
+            "$TFPLAN_BINARY" \
+            -no-color
+        working-directory: terraform/
+
+      - name: Post Slack Message
+        if: always()
+        uses: slackapi/slack-github-action@v2.1.1
+        with:
+          method: chat.postMessage
+          token: ${{ secrets.SLACK_BOT_TOKEN }}
+          payload: |
+            {
+              "channel": "${{ vars.SLACK_CHANNEL_ID_DEV }}",
+              "text": "${{ job.status == 'success' && 'Terraform Apply - Infrastructure: Successful' || 'Terraform Apply - Infrastructure: Failed' }}",
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": {
+                    "type": "plain_text",
+                    "text": "${{ job.status == 'success' && '🚀 Terraform Apply - Infrastructure: ✅ Successful' || '🚀 Terraform Apply - Infrastructure: ❌ Failed' }}"
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Deployed by:*\n${{ github.actor }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Branch:*\n${{ github.ref_name }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Commit:*\n<${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|`${{ github.sha }}`>"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Repository:*\n<${{ github.server_url }}/${{ github.repository }}|${{ github.repository }}>"
+                    }
+                  ]
+                },
+                {
+                  "type": "actions",
+                  "elements": [
+                    {
+                      "type": "button",
+                      "text": {
+                        "type": "plain_text",
+                        "text": "View Workflow"
+                      },
+                      "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                    }
+                  ]
+                }
+              ]
+            }

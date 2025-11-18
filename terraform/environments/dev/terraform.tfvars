@@ -1,0 +1,13 @@
+project_name                            = "crc"
+region                                  = "eu-central-1"
+environment                             = "dev"
+frontend_repo                           = "oyiat/crc_frontend"
+backend_repo                            = "oyiat/crc_backend"
+infra_repo                              = "oyiat/crc_infra"
+zone_name                               = "jorislefondeur.com."
+domain_name                             = "dev.jorislefondeur.com"
+acm_wildcard                            = "*.jorislefondeur.com"
+cloudfront_frontend_origin_cache_policy = "CachingDisabled"
+cloudfront_backend_origin_cache_policy  = "CachingDisabled"
+origin_verify_rotation                  = 30
+lambda_log_retention                    = 7

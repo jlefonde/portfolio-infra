@@ -5,6 +5,9 @@ inputs:
   terraform-version:
     description: Terraform version to install
     required: true
+  backend-config:
+    description: Path to backend configuration file
+    required: true
 
 outputs:
   init-outcome:
@@ -22,5 +25,5 @@ runs:
     - name: Initialize Terraform
       id: init
       shell: bash
-      run: terraform init -input=false
+      run: terraform init -input=false -backend-config="${{ inputs.backend-config }}"
       working-directory: terraform/
