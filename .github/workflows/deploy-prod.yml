@@ -74,14 +74,14 @@ jobs:
       - name: Create Plan Summary
         if: ${{ always() && steps.confirm.outcome != 'failure' }}
         run: |
-          source ${{ github.workspace}}/.github/scripts/utils/constants.sh
+          source ${{ github.workspace }}/.github/scripts/utils/constants.sh
 
           echo "## 📊 Overview" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Step | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
           echo "| ⚙️ Init | ${OUTCOMES[${{ steps.setup.outputs.init-outcome }}]} ${{ steps.setup.outputs.init-outcome }}" >> $GITHUB_STEP_SUMMARY
-          echo "| 📝 Format | ${OUTCOMES[${{ steps.validate.outputs.fmt-outcome}}]} ${{ steps.validate.outputs.fmt-outcome}}" >> $GITHUB_STEP_SUMMARY
+          echo "| 📝 Format | ${OUTCOMES[${{ steps.validate.outputs.fmt-outcome }}]} ${{ steps.validate.outputs.fmt-outcome}}" >> $GITHUB_STEP_SUMMARY
           echo "| 🛡️ Validate | ${OUTCOMES[${{ steps.validate.outputs.validate-outcome }}]} ${{ steps.validate.outputs.validate-outcome }}" >> $GITHUB_STEP_SUMMARY
           echo "| 🔨 Build | ${OUTCOMES[${{ steps.build.outputs.build-outcome }}]} ${{ steps.build.outputs.build-outcome }} |" >> $GITHUB_STEP_SUMMARY
           echo "| 📋 Plan | ${OUTCOMES[${{ steps.plan.outputs.plan-outcome }}]} ${{ steps.plan.outputs.plan-outcome }}" >> $GITHUB_STEP_SUMMARY

@@ -1,23 +1,16 @@
-name: Deploy Development
+name: Terraform Plan
 
 on:
-  push:
-    branches:
-      - main
-  workflow_dispatch:
-    
+  pull_request:
+    types:
+      - opened
+
 permissions:
   id-token: write
   contents: read
 
-env:
-  VAR_FILE: environments/dev/terraform.tfvars
-  TFPLAN_BINARY: tfplan-${{ github.sha }}
-  LAMBDA_ARTIFACT_NAME: lambda-functions-${{ github.sha }}
-  LAMBDA_BUILD_DIR: ${{ github.workspace }}/dist
-
 jobs:
-  deploy:
+  plan:
     runs-on: ubuntu-latest
     environment: dev
     steps:
@@ -57,29 +50,20 @@ jobs:
           tfplan-binary: ${{ env.TFPLAN_BINARY }}
           var-file: ${{ env.VAR_FILE }}
 
-      - name: Apply Terraform
-        id: apply
-        run: |
-          terraform apply \
-            "$TFPLAN_BINARY" \
-            -no-color
-        working-directory: terraform/
-
-      - name: Create Summary
+      - name: Create Plan Summary
         if: always()
         run: |
-          source ${{ github.workspace}}/.github/scripts/utils/constants.sh
+          source ${{ github.workspace }}/.github/scripts/utils/constants.sh
 
           echo "## 📊 Overview" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Step | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| ⚙️ Init | ${OUTCOMES[${{ steps.setup.outputs.init-outcome }}]} ${{ steps.setup.outputs.init-outcome }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| 📝 Format | ${OUTCOMES[${{ steps.validate.outputs.fmt-outcome}}]} ${{ steps.validate.outputs.fmt-outcome}}" >> $GITHUB_STEP_SUMMARY
+          echo "| ⚙️ Init | ${OUTCOMES[${{ steps.setup.outputs.init-outcome }}]} ${{ steps.setup.outputs.init-outcome }}" >> $GITHUB_STEP_SUMMARY
+          echo "| 📝 Format | ${OUTCOMES[${{ steps.validate.outputs.fmt-outcome }}]} ${{ steps.validate.outputs.fmt-outcome}}" >> $GITHUB_STEP_SUMMARY
           echo "| 🛡️ Validate | ${OUTCOMES[${{ steps.validate.outputs.validate-outcome }}]} ${{ steps.validate.outputs.validate-outcome }}" >> $GITHUB_STEP_SUMMARY
           echo "| 🔨 Build | ${OUTCOMES[${{ steps.build.outputs.build-outcome }}]} ${{ steps.build.outputs.build-outcome }} |" >> $GITHUB_STEP_SUMMARY
           echo "| 📋 Plan | ${OUTCOMES[${{ steps.plan.outputs.plan-outcome }}]} ${{ steps.plan.outputs.plan-outcome }}" >> $GITHUB_STEP_SUMMARY
-          echo "| 🚀 Apply | ${OUTCOMES[${{ steps.apply.outcome }}]} ${{ steps.apply.outcome }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
           echo "## 📋 Plan" >> $GITHUB_STEP_SUMMARY
@@ -105,16 +89,6 @@ jobs:
           fi
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          echo "## 🚀 Apply" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          if [[ "${{ steps.apply.outcome }}" == "success" ]]; then
-            echo "### ✅ Deployment Successful" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "### ❌ Deployment Failed" >> $GITHUB_STEP_SUMMARY
-            echo "Please review the workflow logs for error details." >> $GITHUB_STEP_SUMMARY
-          fi
-          echo "" >> $GITHUB_STEP_SUMMARY
-
           echo "---" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **Timestamp:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> $GITHUB_STEP_SUMMARY
@@ -123,58 +97,3 @@ jobs:
           echo "- **Branch:** \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Workflow:** [${{ github.workflow }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
         working-directory: terraform/
-
-      - name: Post Slack Message
-        if: always()
-        uses: slackapi/slack-github-action@v2.1.1
-        with:
-          method: chat.postMessage
-          token: ${{ secrets.SLACK_BOT_TOKEN }}
-          payload: |
-            {
-              "channel": "${{ vars.SLACK_CHANNEL_ID_DEV }}",
-              "text": "${{ job.status == 'success' && 'Terraform Apply - Infrastructure: Successful' || 'Terraform Apply - Infrastructure: Failed' }}",
-              "blocks": [
-                {
-                  "type": "header",
-                  "text": {
-                    "type": "plain_text",
-                    "text": "${{ job.status == 'success' && '🚀 Terraform Apply - Infrastructure: ✅ Successful' || '🚀 Terraform Apply - Infrastructure: ❌ Failed' }}"
-                  }
-                },
-                {
-                  "type": "section",
-                  "fields": [
-                    {
-                      "type": "mrkdwn",
-                      "text": "*Deployed by:*\n${{ github.actor }}"
-                    },
-                    {
-                      "type": "mrkdwn",
-                      "text": "*Branch:*\n${{ github.ref_name }}"
-                    },
-                    {
-                      "type": "mrkdwn",
-                      "text": "*Commit:*\n<${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|`${{ github.sha }}`>"
-                    },
-                    {
-                      "type": "mrkdwn",
-                      "text": "*Repository:*\n<${{ github.server_url }}/${{ github.repository }}|${{ github.repository }}>"
-                    }
-                  ]
-                },
-                {
-                  "type": "actions",
-                  "elements": [
-                    {
-                      "type": "button",
-                      "text": {
-                        "type": "plain_text",
-                        "text": "View Workflow"
-                      },
-                      "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-                    }
-                  ]
-                }
-              ]
-            }
