@@ -214,7 +214,7 @@ jobs:
           chmod +x "$DRIFT_SCRIPT"
           "$DRIFT_SCRIPT"
         env:
-          DRIFT_SCRIPT: ./.github/scripts/drift-detection.sh
+          DRIFT_SCRIPT: ${{ github.workspace }}/.github/scripts/drift-detection.sh
         working-directory: terraform/
 
       - name: Apply Terraform

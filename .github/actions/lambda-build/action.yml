@@ -34,7 +34,7 @@ runs:
         chmod +x "$BUILD_SCRIPT"
         "$BUILD_SCRIPT"
       env:
-        BUILD_SCRIPT: ./.github/scripts/build-lambda.sh
+        BUILD_SCRIPT: ${{ github.workspace }}/.github/scripts/build-lambda.sh
         BUILD_DIR: ${{ inputs.lambda-build-dir }}
 
     - name: Upload Lambda Build Artifacts
