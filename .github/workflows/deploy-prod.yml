@@ -74,7 +74,7 @@ jobs:
       - name: Create Plan Summary
         if: ${{ always() && steps.confirm.outcome != 'failure' }}
         run: |
-          source ./.github/scripts/utils/constants.sh
+          source ${{ github.workspace}}/.github/scripts/utils/constants.sh
 
           echo "## 📊 Overview" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -228,7 +228,7 @@ jobs:
       - name: Create Apply Summary
         if: always()
         run: |
-          source ./.github/scripts/utils/constants.sh
+          source ${{ github.workspace}}/.github/scripts/utils/constants.sh
 
           echo "## 📊 Overview" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
