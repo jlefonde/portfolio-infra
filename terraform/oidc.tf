@@ -136,7 +136,7 @@ data "aws_iam_policy_document" "oidc_backend" {
 }
 
 data "aws_s3_bucket" "tfstate" {
-  bucket = "crc-tfstate"
+  bucket = var.tfstate_bucket
 }
 
 data "aws_iam_policy_document" "oidc_infra_tfstate" {

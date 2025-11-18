@@ -1,5 +1,6 @@
 project_name                            = "crc"
 region                                  = "eu-central-1"
+tfstate_bucket                          = "crc-tfstate-dev"
 environment                             = "dev"
 frontend_repo                           = "oyiat/crc_frontend"
 backend_repo                            = "oyiat/crc_backend"

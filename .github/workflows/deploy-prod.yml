@@ -16,7 +16,7 @@ env:
   VAR_FILE: environments/prod/terraform.tfvars
   TFPLAN_BINARY: tfplan-${{ github.sha }}
   LAMBDA_ARTIFACT_NAME: lambda-functions-${{ github.sha }}
-  TF_VAR_lambda_build_dir: ${{ github.workspace }}/dist
+  LAMBDA_BUILD_DIR: ${{ github.workspace }}/dist
 
 jobs:
   plan:
@@ -59,7 +59,7 @@ jobs:
         id: build
         uses: ./.github/actions/lambda-build
         with:
-          lambda-build-dir: ${{ env.TF_VAR_lambda_build_dir }}
+          lambda-build-dir: ${{ env.LAMBDA_BUILD_DIR }}
           lambda-artifact-name: ${{ env.LAMBDA_ARTIFACT_NAME }}
           upload-lambda-artifact: true
 
@@ -200,7 +200,7 @@ jobs:
         uses: actions/download-artifact@v5
         with:
           name: ${{ env.LAMBDA_ARTIFACT_NAME }}
-          path: ${{ env.TF_VAR_lambda_build_dir }}
+          path: ${{ env.LAMBDA_BUILD_DIR }}
 
       - name: Download Plan Artifact
         uses: actions/download-artifact@v5

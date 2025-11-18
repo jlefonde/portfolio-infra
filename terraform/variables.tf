@@ -8,6 +8,11 @@ variable "region" {
   type        = string
 }
 
+variable "tfstate_bucket" {
+  description = "S3 bucket name for Terraform state"
+  type        = string
+}
+
 variable "zone_name" {
   description = "The Route53 zone name"
   type        = string
@@ -56,11 +61,6 @@ variable "cloudfront_backend_origin_cache_policy" {
 variable "origin_verify_rotation" {
   description = "Number of days between automatic scheduled secret rotation"
   type        = number
-}
-
-variable "lambda_build_dir" {
-  description = "The path to the lambda build directory"
-  type        = string
 }
 
 variable "lambda_log_retention" {

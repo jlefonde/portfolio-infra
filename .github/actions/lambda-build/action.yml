@@ -31,47 +31,11 @@ runs:
       id: build
       shell: bash
       run: |
-        echo "Searching for Lambda functions..."
-        lambda_dirs=$(find ./lambda/ -name "main.go" -printf '%h\n' | sort -u)
-
-        lambda_count=$(echo "$lambda_dirs" | wc -l)
-        echo "Found $lambda_count Lambda function(s) to build"
-        echo ""
-
-        echo "Output directory: ${{ inputs.lambda-build-dir }}"
-        mkdir -p "${{ inputs.lambda-build-dir }}"
-        echo ""
-
-        for dir in $lambda_dirs; do
-          func_name=$(basename "$dir")
-
-          echo "Building lambda function: $func_name"
-          echo "  - Source: $dir"
-          echo "  - Target: ${{ inputs.lambda-build-dir }}/$func_name.zip"
-
-          cd "$dir"
-
-          output_binary="${{ inputs.lambda-build-dir }}/bootstrap"
-          if GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -o "$output_binary" main.go; then
-              binary_size=$(stat -c%s "$output_binary" | numfmt --to=iec-i --suffix=B)
-              
-              TZ=UTC touch -t 202001010000.00 "$output_binary"
-              zip -X -j "${{ inputs.lambda-build-dir }}/$func_name.zip" "$output_binary"
-              TZ=UTC touch -t 202001010000.00 "${{ inputs.lambda-build-dir }}/$func_name.zip"
-
-              rm "$output_binary"
-              echo "Build successful (size: $binary_size)"
-          else
-              echo "Error: Build failed"
-              exit 1
-          fi
-          
-          cd - > /dev/null
-          echo ""
-        done
-
-        echo "All Lambda functions compiled successfully"
-        echo ""
+        chmod +x "$BUILD_SCRIPT"
+        "$BUILD_SCRIPT"
+      env:
+        BUILD_SCRIPT: ./.github/scripts/build-lambda.sh
+        BUILD_DIR: ${{ inputs.lambda-build-dir }}
 
     - name: Upload Lambda Build Artifacts
       if: ${{ inputs.upload-lambda-artifact == 'true' }}
