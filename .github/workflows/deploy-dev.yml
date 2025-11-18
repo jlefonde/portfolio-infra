@@ -58,6 +58,7 @@ jobs:
           var-file: ${{ env.VAR_FILE }}
 
       - name: Apply Terraform
+        if: steps.plan.outputs.plan_exitcode == '2'
         id: apply
         run: |
           terraform apply \
@@ -97,20 +98,20 @@ jobs:
             echo '```terraform' >> $GITHUB_STEP_SUMMARY
             terraform show $TFPLAN_BINARY -no-color >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
+
+            echo "## 🚀 Apply" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            if [[ "${{ steps.apply.outcome }}" == "success" ]]; then
+              echo "### ✅ Deployment Successful" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "### ❌ Deployment Failed" >> $GITHUB_STEP_SUMMARY
+              echo "Please review the workflow logs for error details." >> $GITHUB_STEP_SUMMARY
+            fi
+            echo "" >> $GITHUB_STEP_SUMMARY
             echo "</details>" >> $GITHUB_STEP_SUMMARY
           else
             echo "### ❌ Plan Failed" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "Please review the workflow logs for error details." >> $GITHUB_STEP_SUMMARY
-          fi
-          echo "" >> $GITHUB_STEP_SUMMARY
-
-          echo "## 🚀 Apply" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          if [[ "${{ steps.apply.outcome }}" == "success" ]]; then
-            echo "### ✅ Deployment Successful" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "### ❌ Deployment Failed" >> $GITHUB_STEP_SUMMARY
             echo "Please review the workflow logs for error details." >> $GITHUB_STEP_SUMMARY
           fi
           echo "" >> $GITHUB_STEP_SUMMARY
