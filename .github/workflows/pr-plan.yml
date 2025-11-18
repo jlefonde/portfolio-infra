@@ -9,6 +9,11 @@ permissions:
   id-token: write
   contents: read
 
+env:
+  VAR_FILE: environments/dev/terraform.tfvars
+  TFPLAN_BINARY: tfplan-${{ github.sha }}
+  LAMBDA_BUILD_DIR: ${{ github.workspace }}/dist
+
 jobs:
   plan:
     runs-on: ubuntu-latest
