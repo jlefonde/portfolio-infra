@@ -109,15 +109,36 @@ jobs:
         working-directory: terraform/
 
       - name: Comment Pull Request
-        uses: actions/github-script@v5
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v8
         with:
           script: |
             const fs = require('fs');
-            const summary = fs.readFileSync(process.env.GITHUB_STEP_SUMMARY, 'utf8');
             
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: summary
-            });
+            try {
+              const summaryPath = process.env.GITHUB_STEP_SUMMARY;
+              
+              if (!summaryPath || !fs.existsSync(summaryPath)) {
+                console.log('Summary file not found');
+                return;
+              }
+              
+              const summary = fs.readFileSync(summaryPath, 'utf8').trim();
+              
+              if (!summary) {
+                console.log('Summary is empty');
+                return;
+              }
+              
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: summary
+              });
+              
+              console.log('Comment posted successfully');
+            } catch (error) {
+              console.error('Failed to post comment:', error.message);
+              throw error;
+            }
