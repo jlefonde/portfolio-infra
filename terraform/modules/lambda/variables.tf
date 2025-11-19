@@ -16,7 +16,6 @@ variable "lambda_config" {
     s3_key                     = optional(string)
     enable_log                 = optional(bool, true)
     log_retention              = optional(number, 7)
-    ignore_source_code_changes = optional(bool, false)
 
     policy_statements = optional(list(object({
       sid       = optional(string)
