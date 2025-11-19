@@ -98,7 +98,6 @@ resource "aws_lambda_function" "lambda" {
     ignore_changes = [
       source_code_hash,
       s3_key,
-      last_modified
     ]
   }
 }
