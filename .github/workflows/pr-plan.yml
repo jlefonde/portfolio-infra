@@ -106,6 +106,8 @@ jobs:
           echo "- **Triggered by:** @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Branch:** \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Workflow:** [${{ github.workflow }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
+        
+          cat $GITHUB_STEP_SUMMARY >> "${{ github.workspace }}/summary.md"
         working-directory: terraform/
 
       - name: Comment Pull Request
@@ -114,31 +116,11 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            
-            try {
-              const summaryPath = process.env.GITHUB_STEP_SUMMARY;
-              
-              if (!summaryPath || !fs.existsSync(summaryPath)) {
-                console.log('Summary file not found');
-                return;
-              }
-              
-              const summary = fs.readFileSync(summaryPath, 'utf8').trim();
-              
-              if (!summary) {
-                console.log('Summary is empty');
-                return;
-              }
-              
-              await github.rest.issues.createComment({
+            const summary = fs.readFileSync("${{ github.workspace }}/summary.md", 'utf8').trim();
+
+            await github.rest.issues.createComment({
                 issue_number: context.issue.number,
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 body: summary
               });
-              
-              console.log('Comment posted successfully');
-            } catch (error) {
-              console.error('Failed to post comment:', error.message);
-              throw error;
-            }
