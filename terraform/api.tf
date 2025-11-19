@@ -1,6 +1,6 @@
 locals {
   api_lambdas = {
-    visitor_count = {
+    visitor-count = {
       handler                    = "bootstrap"
       runtime                    = "provided.al2"
       source_file                = "${path.root}/../dist/bootstrap.zip"
