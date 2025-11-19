@@ -65,6 +65,14 @@ resource "aws_s3_object" "lambda" {
   key         = var.lambda_config.s3_key
   source      = var.lambda_config.source_file
   source_hash = filebase64sha256(var.lambda_config.source_file)
+
+  lifecycle {
+    ignore_changes = [
+      source,
+      source_hash,
+      etag
+    ]
+  }
 }
 
 resource "aws_lambda_function" "lambda" {
@@ -73,8 +81,8 @@ resource "aws_lambda_function" "lambda" {
   publish       = var.lambda_config.publish
 
   filename         = !var.lambda_config.use_s3 ? var.lambda_config.source_file : null
-  source_code_hash = !var.lambda_config.use_s3 ? filebase64sha256(var.lambda_config.source_file) : aws_s3_object.lambda[0].source_hash
-  s3_key           = var.lambda_config.use_s3 ? aws_s3_object.lambda[0].key : null
+  source_code_hash = !var.lambda_config.use_s3 ? filebase64sha256(var.lambda_config.source_file) : null
+  s3_key           = var.lambda_config.use_s3 ? var.lambda_config.s3_key : null
   s3_bucket        = var.lambda_config.use_s3 ? var.lambda_config.s3_bucket : null
 
   handler = var.lambda_config.handler
@@ -89,7 +97,8 @@ resource "aws_lambda_function" "lambda" {
   lifecycle {
     ignore_changes = [
       source_code_hash,
-      s3_key
+      s3_key,
+      last_modified
     ]
   }
 }
