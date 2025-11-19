@@ -1,14 +1,16 @@
 locals {
   api_lambdas = {
     visitor-count = {
-      handler       = "bootstrap"
-      runtime       = "provided.al2"
-      source_file   = "${path.root}/../dist/bootstrap.zip"
-      use_s3        = true
-      s3_bucket     = aws_s3_bucket.backend.bucket
-      s3_key        = "lambdas/visitor_count.zip"
-      enable_log    = true
-      log_retention = var.lambda_log_retention
+      handler                    = "bootstrap"
+      runtime                    = "provided.al2"
+      source_file                = "${path.root}/../dist/bootstrap.zip"
+      use_s3                     = true
+      s3_bucket                  = aws_s3_bucket.backend.bucket
+      s3_key                     = "lambdas/visitor_count.zip"
+      enable_log                 = true
+      log_retention              = var.lambda_log_retention
+      ignore_source_code_changes = true
+
       policy_statements = [
         {
           sid = "AllowLambdaServiceAccessDynamoDb"

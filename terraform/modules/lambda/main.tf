@@ -68,6 +68,8 @@ resource "aws_s3_object" "lambda" {
 }
 
 resource "aws_lambda_function" "lambda" {
+  count = var.lambda_config.ignore_source_code_changes ? 0 : 1
+
   function_name = var.lambda_name
   role          = aws_iam_role.lambda.arn
   publish       = var.lambda_config.publish
@@ -85,4 +87,33 @@ resource "aws_lambda_function" "lambda" {
   }
 
   depends_on = [aws_s3_object.lambda]
+}
+
+resource "aws_lambda_function" "lambda_ignore_changes" {
+  count = var.lambda_config.ignore_source_code_changes ? 1 : 0
+
+  function_name = var.lambda_name
+  role          = aws_iam_role.lambda.arn
+  publish       = var.lambda_config.publish
+
+  filename         = !var.lambda_config.use_s3 ? var.lambda_config.source_file : null
+  source_code_hash = !var.lambda_config.use_s3 ? filebase64sha256(var.lambda_config.source_file) : aws_s3_object.lambda[0].source_hash
+  s3_key           = var.lambda_config.use_s3 ? aws_s3_object.lambda[0].key : null
+  s3_bucket        = var.lambda_config.use_s3 ? var.lambda_config.s3_bucket : null
+
+  handler = var.lambda_config.handler
+  runtime = var.lambda_config.runtime
+
+  environment {
+    variables = var.lambda_config.environment
+  }
+
+  depends_on = [aws_s3_object.lambda]
+
+  lifecycle {
+    ignore_changes = [
+      source_code_hash,
+      s3_key
+    ]
+  }
 }
