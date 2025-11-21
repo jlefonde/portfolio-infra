@@ -114,7 +114,8 @@ data "aws_iam_policy_document" "oidc_backend" {
     actions = [
       "s3:ListBucket",
       "s3:PutObject",
-      "s3:DeleteObject"
+      "s3:GetObject",
+      "s3:DeleteObject",
     ]
 
     resources = [

@@ -59,6 +59,7 @@ jobs:
           var-file: ${{ env.VAR_FILE }}
 
       - name: Apply Terraform
+        if: steps.plan.outputs.plan_exitcode == '2'
         id: apply
         run: |
           terraform apply \
