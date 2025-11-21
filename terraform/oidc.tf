@@ -124,7 +124,7 @@ data "aws_iam_policy_document" "oidc_backend" {
   }
 
   statement {
-    sid = "AllowUpdateLambdaFunctionCode"
+    sid    = "AllowUpdateLambdaFunctionCode"
     effect = "Allow"
 
     actions = ["lambda:UpdateFunctionCode"]
