@@ -1,3 +1,5 @@
+#!/bin/bash
+
 echo "Searching for Lambda functions..."
 lambda_dirs=$(find ./lambda/ -name "main.go" -printf '%h\n' | sort -u)
 

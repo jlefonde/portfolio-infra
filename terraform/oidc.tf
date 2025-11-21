@@ -124,6 +124,18 @@ data "aws_iam_policy_document" "oidc_backend" {
   }
 
   statement {
+    sid = "AllowUpdateLambdaFunctionCode"
+    effect = "Allow"
+
+    actions = ["lambda:UpdateFunctionCode"]
+
+    resources = [
+      for lambda_key, lambda_config in local.api_lambdas :
+      module.api_lambdas[lambda_key].lambda_function_arn
+    ]
+  }
+
+  statement {
     sid    = "AllowSSMParameterRead"
     effect = "Allow"
 
