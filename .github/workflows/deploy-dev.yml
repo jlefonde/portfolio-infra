@@ -58,6 +58,11 @@ jobs:
           tfplan-binary: ${{ env.TFPLAN_BINARY }}
           var-file: ${{ env.VAR_FILE }}
 
+      - name: Debug Exit Code
+        run: |
+          echo "Plan exit code: ${{ steps.plan.outputs.plan-exitcode }}"
+          echo "Plan outcome: ${{ steps.plan.outputs.plan-outcome }}"
+
       - name: Apply Terraform
         if: steps.plan.outputs.plan-exitcode == '2'
         id: apply
