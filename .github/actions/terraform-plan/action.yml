@@ -40,7 +40,7 @@ runs:
         set -e
 
         [[ $TF_EXITCODE -ne 1 ]] || exit 1
-        echo "exitcode=$TF_EXITCODE" >> $GITHUB_OUTPUT  
+        echo "exitcode=$TF_EXITCODE" >> $GITHUB_OUTPUT
       working-directory: terraform/
 
     - name: Upload Plan Artifact
