@@ -22,30 +22,17 @@ resource "aws_s3_bucket" "frontend" {
 
 data "aws_iam_policy_document" "cloudfront_s3_access" {
   statement {
-    sid    = "AllowCloudFrontGetObject"
+    sid    = "AllowCloudFrontServicePrincipal"
     effect = "Allow"
+
     principals {
       type        = "Service"
       identifiers = ["cloudfront.amazonaws.com"]
     }
+
     actions   = ["s3:GetObject"]
     resources = ["${aws_s3_bucket.frontend.arn}/*"]
-    condition {
-      test     = "ArnLike"
-      variable = "AWS:SourceArn"
-      values   = [aws_cloudfront_distribution.main.arn]
-    }
-  }
 
-  statement {
-    sid    = "AllowCloudFrontListBucket"
-    effect = "Allow"
-    principals {
-      type        = "Service"
-      identifiers = ["cloudfront.amazonaws.com"]
-    }
-    actions   = ["s3:ListBucket"]
-    resources = ["${aws_s3_bucket.frontend.arn}"]
     condition {
       test     = "ArnLike"
       variable = "AWS:SourceArn"
@@ -119,6 +106,12 @@ resource "aws_cloudfront_distribution" "main" {
     viewer_protocol_policy   = "redirect-to-https"
     cache_policy_id          = lookup(local.cloudfront_cache_policy_ids, var.backend_origin_cache_policy)
     origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer_except_host.id
+  }
+
+  custom_error_response {
+    error_code         = 403
+    response_code      = 200
+    response_page_path = "/index.html"
   }
 
   viewer_certificate {
