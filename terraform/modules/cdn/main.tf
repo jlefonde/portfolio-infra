@@ -22,20 +22,30 @@ resource "aws_s3_bucket" "frontend" {
 
 data "aws_iam_policy_document" "cloudfront_s3_access" {
   statement {
-    sid    = "AllowCloudFrontServicePrincipal"
+    sid    = "AllowCloudFrontGetObject"
     effect = "Allow"
-
     principals {
       type        = "Service"
       identifiers = ["cloudfront.amazonaws.com"]
     }
-
-    actions   = [
-      "s3:GetObject",
-      "s3:ListBucket",
-    ]
+    actions   = ["s3:GetObject"]
     resources = ["${aws_s3_bucket.frontend.arn}/*"]
+    condition {
+      test     = "ArnLike"
+      variable = "AWS:SourceArn"
+      values   = [aws_cloudfront_distribution.main.arn]
+    }
+  }
 
+  statement {
+    sid    = "AllowCloudFrontListBucket"
+    effect = "Allow"
+    principals {
+      type        = "Service"
+      identifiers = ["cloudfront.amazonaws.com"]
+    }
+    actions   = ["s3:ListBucket"]
+    resources = ["${aws_s3_bucket.frontend.arn}"]
     condition {
       test     = "ArnLike"
       variable = "AWS:SourceArn"
