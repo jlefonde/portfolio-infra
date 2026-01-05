@@ -9,6 +9,9 @@ locals {
       s3_key        = "lambdas/visitor_count.zip"
       enable_log    = true
       log_retention = var.lambda_log_retention
+      environment = {
+        MIN_VISIT_INTERVAL_SECONDS = 86400
+      }
       policy_statements = [
         {
           sid = "AllowLambdaServiceAccessDynamoDb"
