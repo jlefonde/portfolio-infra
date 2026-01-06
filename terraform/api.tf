@@ -23,6 +23,25 @@ locals {
         }
       ]
     },
+    montly-ctd = {
+      handler       = "bootstrap"
+      runtime       = "provided.al2"
+      source_file   = "${path.root}/../dist/bootstrap.zip"
+      use_s3        = true
+      s3_bucket     = aws_s3_bucket.backend.bucket
+      s3_key        = "lambdas/monthly_ctd.zip"
+      enable_log    = true
+      log_retention = var.lambda_log_retention
+      policy_statements = [
+        {
+          sid = "AllowLambdaServiceAccessDynamoDb"
+          actions = [
+            "dynamodb:GetItem",
+          ]
+          resources = [module.dynamodb["monthly-ctd"].table_arn]
+        }
+      ]
+    },
     origin-verify-authorizer = {
       handler       = "bootstrap"
       runtime       = "provided.al2"
@@ -76,7 +95,16 @@ locals {
           method                 = "POST"
           payload_format_version = "2.0"
         }
-      }
+      },
+      "GET /api/monthly-ctd" = {
+        authorizer_key     = "origin-verify"
+        authorization_type = "CUSTOM"
+        integration = {
+          lambda_key             = "montly-ctd"
+          method                 = "POST"
+          payload_format_version = "2.0"
+        }
+      },
     }
   }
 }
@@ -182,6 +210,7 @@ resource "aws_lambda_permission" "scheduler_invoke" {
 }
 
 resource "aws_scheduler_schedule" "monthly_ctd" {
+  name = "monthly-ctd"
   schedule_expression = "cron(0 0 ? * SUN *)"
 
   flexible_time_window {

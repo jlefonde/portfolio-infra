@@ -29,6 +29,17 @@ module "dynamodb" {
         }
       ]
     }
+    monthly-ctd = {
+      hash_key     = "id"
+      billing_mode = "PAY_PER_REQUEST"
+
+      attributes = [
+        {
+          name = "id"
+          type = "S"
+        }
+      ]
+    }
   }
 
   table_name   = "${var.project_name}-${each.key}"
