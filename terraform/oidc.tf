@@ -208,7 +208,8 @@ data "aws_iam_policy_document" "oidc_infra_iam" {
       "iam:TagRole",
       "iam:UntagRole",
       "iam:ListRoleTags",
-      "iam:PassRole"
+      "iam:PassRole",
+      "iam:ListInstanceProfilesForRole"
     ]
 
     resources = ["arn:aws:iam::${data.aws_caller_identity.this.account_id}:role/*"]
