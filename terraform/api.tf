@@ -23,7 +23,7 @@ locals {
         }
       ]
     },
-    montly-ctd = {
+    monthly-ctd = {
       handler       = "bootstrap"
       runtime       = "provided.al2"
       source_file   = "${path.root}/../dist/bootstrap.zip"
@@ -100,7 +100,7 @@ locals {
         authorizer_key     = "origin-verify"
         authorization_type = "CUSTOM"
         integration = {
-          lambda_key             = "montly-ctd"
+          lambda_key             = "monthly-ctd"
           method                 = "POST"
           payload_format_version = "2.0"
         }
