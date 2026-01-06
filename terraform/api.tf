@@ -138,3 +138,58 @@ resource "aws_lambda_permission" "api_gateway_invoke" {
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${module.api_gateway.api_execution_arn}/*/*"
 }
+
+data "aws_iam_policy_document" "scheduler_assume_role" {
+  statement {
+    sid    = "AllowSchedulerServiceAssumeRole"
+    effect = "Allow"
+
+    principals {
+      type        = "Service"
+      identifiers = ["scheduler.amazonaws.com"]
+    }
+
+    actions = ["sts:AssumeRole"]
+  }
+}
+
+data "aws_iam_policy_document" "scheduler_invoke_lambda" {
+  statement {
+    sid    = "AllowSchedulerInvokeLambda"
+    effect = "Allow"
+
+    actions = ["lambda:InvokeFunction"]
+    resources = [module.api_lambdas["visitor-count"].lambda_function_arn]
+  }
+}
+
+resource "aws_iam_role" "scheduler_role" {
+  name               = "scheduler-role"
+  assume_role_policy = data.aws_iam_policy_document.scheduler_assume_role.json
+}
+
+resource "aws_iam_role_policy" "scheduler" {
+  role   = aws_iam_role.scheduler_role.name
+  policy = data.aws_iam_policy_document.scheduler_invoke_lambda.json
+}
+
+resource "aws_lambda_permission" "scheduler_invoke" {
+  statement_id  = "AllowSchedulerInvoke-visitor-count"
+  function_name = module.api_lambdas["visitor-count"].lambda_function_name
+  action        = "lambda:InvokeFunction"
+  principal     = "scheduler.amazonaws.com"
+  source_arn    = aws_scheduler_schedule.monthly_ctd.arn
+}
+
+resource "aws_scheduler_schedule" "monthly_ctd" {
+  schedule_expression = "cron(0 0 ? * SUN *)"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn = module.api_lambdas["visitor-count"].lambda_function_arn
+    role_arn = aws_iam_role.scheduler_role.arn
+  }
+}
